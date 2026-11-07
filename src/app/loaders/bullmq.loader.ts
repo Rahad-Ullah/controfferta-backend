@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { initEmailWorker } from '../../helpers/email.worker';
 import { scheduleMediaCleanupJob } from '../modules/mediaUpload/mediaUpload.queue';
 import { initMediaUploadWorker } from '../modules/mediaUpload/mediaUpload.worker';
 import { initNotificationWorker } from '../modules/notification/notification.worker';
@@ -13,10 +14,12 @@ export const initAppQueuesAndWorkers =
     // 1. Initialize Workers
     const mediaWorker = initMediaUploadWorker();
     const notificationWorker = initNotificationWorker();
+    const emailWorker = initEmailWorker();
 
     const workers: Worker<any, any, any>[] = [
       mediaWorker,
       notificationWorker,
+      emailWorker,
     ];
 
     // 2. Schedule Repeatable Jobs

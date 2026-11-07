@@ -1,11 +1,11 @@
 import { StatusCodes } from 'http-status-codes';
 import { JwtPayload } from 'jsonwebtoken';
 import ApiError from '../../../errors/ApiError';
-import { emailHelper } from '../../../helpers/emailHelper';
+import { EmailQueue } from '../../../helpers/email.queue';
 import { emailTemplate } from '../../../shared/emailTemplate';
 import deleteS3File from '../../../shared/deleteS3File';
 import generateOTP from '../../../utils/generateOTP';
-import { IUser } from './user.interface';
+import { IProviderProfileUpdate, IRegisterUser, IUser } from './user.interface';
 import { User } from './user.model';
 import { UserRole, UserStatus } from './user.constant';
 import QueryBuilder from '../../builder/QueryBuilder';
@@ -13,14 +13,15 @@ import mongoose from 'mongoose';
 import { sendNotifications } from '../../../helpers/notificationHelper';
 import { NotificationType } from '../notification/notification.constant';
 import { MediaUploadServices } from '../mediaUpload/mediaUpload.service';
+import { Provider } from '../provider/provider.model';
+import { errorLogger } from '../../../shared/logger';
 
-const createUserToDB = async (payload: Partial<IUser>) => {
+const createUserToDB = async (payload: IRegisterUser) => {
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
 
-    // Check if user exists
     const isExistUser = await User.exists({ email: payload.email }).session(
       session,
     );
@@ -28,36 +29,74 @@ const createUserToDB = async (payload: Partial<IUser>) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Email already exists!');
     }
 
-    // Create user
-    const [createdUser] = await User.create([payload], { session });
+    const [createdUser] = await User.create(
+      [
+        {
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          email: payload.email,
+          password: payload.password,
+          role: payload.role,
+          phone: payload.phone,
+        },
+      ],
+      { session },
+    );
     if (!createdUser) {
       throw new ApiError(StatusCodes.BAD_REQUEST, 'Failed to create user');
     }
 
-    // Generate OTP
+    if (payload.role === UserRole.Provider) {
+      const [provider] = await Provider.create(
+        [
+          {
+            user: createdUser._id,
+            businessName: payload.businessName,
+            businessType: payload.businessType,
+            bio: payload.bio,
+            interestedCategories: payload.interestedCategories,
+          },
+        ],
+        { session },
+      );
+      if (!provider) {
+        throw new ApiError(
+          StatusCodes.BAD_REQUEST,
+          'Failed to create provider profile',
+        );
+      }
+
+      await User.updateOne(
+        { _id: createdUser._id },
+        { $set: { roleRef: provider._id } },
+        { session },
+      );
+    }
+
     const otp = generateOTP(6);
-    const values = {
-      name: createdUser.firstName,
-      otp: otp,
-      email: createdUser.email!,
-    };
-
-    const createAccountTemplate = emailTemplate.createAccount(values);
-    await emailHelper.sendEmail(createAccountTemplate);
-
-    // Save OTP to DB
-    const authentication = {
-      oneTimeCode: otp,
-      expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
-    };
-
-    await User.findOneAndUpdate(
+    await User.updateOne(
       { _id: createdUser._id },
-      { $set: { authentication } },
-      { session, new: true },
+      {
+        $set: {
+          authentication: {
+            oneTimeCode: otp,
+            expireAt: new Date(Date.now() + 5 * 60 * 1000),
+          },
+        },
+      },
+      { session },
     );
 
     await session.commitTransaction();
+
+    const verificationEmail = emailTemplate.createAccount({
+      otp,
+      email: createdUser.email,
+    });
+    // The account is already saved. Login sends a fresh code if this job is lost.
+    EmailQueue.enqueueEmail(verificationEmail).catch(error =>
+      errorLogger.error('Failed to queue verification email', error),
+    );
 
     return {
       message: 'Account created successfully. Please verify your email.',
@@ -106,30 +145,80 @@ const getProfileFromDB = async (id: string): Promise<Partial<IUser>> => {
   return user;
 };
 
+const providerFieldsOf = (
+  payload: IProviderProfileUpdate,
+): IProviderProfileUpdate => {
+  const update: IProviderProfileUpdate = {};
+  if (payload.businessName !== undefined) {
+    update.businessName = payload.businessName;
+  }
+  if (payload.businessType !== undefined) {
+    update.businessType = payload.businessType;
+  }
+  if (payload.bio !== undefined) update.bio = payload.bio;
+  if (payload.interestedCategories !== undefined) {
+    update.interestedCategories = payload.interestedCategories;
+  }
+  return update;
+};
+
 const updateProfileToDB = async (
   user: JwtPayload,
-  payload: Partial<IUser>,
+  payload: Partial<IUser> & IProviderProfileUpdate,
 ): Promise<Partial<IUser | null>> => {
   const { id } = user;
-  const existingUser = await User.findById(id).select('_id image');
+  const {
+    businessName,
+    businessType,
+    bio,
+    interestedCategories,
+    ...userPayload
+  } = payload;
+  const providerUpdate = providerFieldsOf({
+    businessName,
+    businessType,
+    bio,
+    interestedCategories,
+  });
+  const hasProviderUpdate = Object.keys(providerUpdate).length > 0;
+
+  const existingUser = await User.findById(id).select('_id image role');
   if (!existingUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
-  const result = await User.findByIdAndUpdate(id, payload, {
+  if (hasProviderUpdate && existingUser.role !== UserRole.Provider) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Only a provider can update a company profile',
+    );
+  }
+
+  if (hasProviderUpdate) {
+    const provider = await Provider.findOneAndUpdate(
+      { user: id },
+      { $set: providerUpdate },
+      { new: true },
+    );
+    if (!provider) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Provider profile not found');
+    }
+  }
+
+  const result = await User.findByIdAndUpdate(id, userPayload, {
     new: true,
-  });
+  }).populate('roleRef');
 
   // mark the new file as used
-  if (payload.image) {
-    await MediaUploadServices.markMediaAsUsed(payload.image);
+  if (userPayload.image) {
+    await MediaUploadServices.markMediaAsUsed(userPayload.image);
   }
 
   // unlink old file from s3
   if (
-    payload.image &&
+    userPayload.image &&
     existingUser.image &&
-    payload.image !== existingUser.image
+    userPayload.image !== existingUser.image
   ) {
     deleteS3File(existingUser.image).catch(err => console.error(err));
   }

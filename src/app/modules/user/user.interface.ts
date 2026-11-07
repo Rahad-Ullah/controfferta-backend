@@ -1,4 +1,5 @@
 import { Model, Types } from 'mongoose';
+import { BusinessType } from '../provider/provider.constant';
 import { UserRole, UserStatus } from './user.constant';
 
 export interface IUser {
@@ -41,6 +42,26 @@ export interface IUser {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type IRegisterUser = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  role: UserRole.Client | UserRole.Provider;
+  phone?: IUser['phone'];
+  businessName?: string;
+  businessType?: BusinessType;
+  bio?: string;
+  interestedCategories?: string[];
+};
+
+export type IProviderProfileUpdate = {
+  businessName?: string;
+  businessType?: BusinessType;
+  bio?: string;
+  interestedCategories?: string[];
+};
 
 export type UserModal = {
   isExistUserById(id: string): any;

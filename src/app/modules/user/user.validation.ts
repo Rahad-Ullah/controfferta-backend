@@ -1,27 +1,53 @@
 import { z } from 'zod';
+import { BusinessType } from '../provider/provider.constant';
 import { UserRole, UserStatus } from './user.constant';
 import { objectId } from '../../../shared/objectIdValidator';
 
-const createUserZodSchema = z.object({
-  body: z
+const accountFields = {
+  firstName: z.string({ required_error: 'First name is required' }),
+  lastName: z.string({ required_error: 'Last name is required' }),
+  email: z
+    .string({ required_error: 'Email is required' })
+    .email('Invalid email address'),
+  password: z
+    .string({ required_error: 'Password is required' })
+    .min(8, 'Password must be at least 8 characters long'),
+  phone: z
     .object({
-      firstName: z.string({ required_error: 'First name is required' }),
-      lastName: z.string({ required_error: 'Last name is required' }),
-      role: z.enum([UserRole.Client, UserRole.Provider]),
-      email: z
-        .string({ required_error: 'Email is required' })
-        .email('Invalid email address'),
-      password: z
-        .string({ required_error: 'Password is required' })
-        .min(8, 'Password must be at least 8 characters long'),
-      phone: z
-        .object({
-          countryCode: z.string().min(1).max(5).optional(),
-          number: z.string().optional(),
-        })
-        .optional(),
+      countryCode: z.string().min(1).max(5).optional(),
+      number: z.string().optional(),
     })
-    .strict(),
+    .optional(),
+};
+
+const providerFields = {
+  businessName: z
+    .string({ required_error: 'Business name is required' })
+    .trim()
+    .min(1, 'Business name is required'),
+  businessType: z.nativeEnum(BusinessType, {
+    required_error: 'Business type is required',
+  }),
+  bio: z.string().optional(),
+  interestedCategories: z.array(objectId('category')).optional(),
+};
+
+const createUserZodSchema = z.object({
+  body: z.discriminatedUnion('role', [
+    z
+      .object({
+        role: z.literal(UserRole.Client),
+        ...accountFields,
+      })
+      .strict(),
+    z
+      .object({
+        role: z.literal(UserRole.Provider),
+        ...accountFields,
+        ...providerFields,
+      })
+      .strict(),
+  ]),
 });
 
 const updateUserZodSchema = z.object({
@@ -53,6 +79,10 @@ const updateUserZodSchema = z.object({
         })
         .optional(),
       isNotificationEnabled: z.boolean().optional(),
+      businessName: z.string().trim().min(1).optional(),
+      businessType: z.nativeEnum(BusinessType).optional(),
+      bio: z.string().optional(),
+      interestedCategories: z.array(objectId('category')).optional(),
     })
     .strict(),
 });
