@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { JwtPayload, Secret } from 'jsonwebtoken';
 import config from '../../../config';
 import ApiError from '../../../errors/ApiError';
-import { emailHelper } from '../../../helpers/emailHelper';
+import { EmailQueue } from '../../../helpers/email.queue';
 import { jwtHelper } from '../../../helpers/jwtHelper';
 import { emailTemplate } from '../../../shared/emailTemplate';
 import {
@@ -124,7 +124,7 @@ const forgetPasswordToDB = async (email: string) => {
     email: isExistUser.email,
   };
   const forgetPassword = emailTemplate.resetPassword(value);
-  emailHelper.sendEmail(forgetPassword);
+  await EmailQueue.enqueueEmail(forgetPassword);
 
   //save to DB
   const authentication = {
@@ -327,9 +327,18 @@ const changePasswordToDB = async (
 const refreshTokenToDB = async (token: string) => {
   const decoded = jwtHelper.verifyToken(token, config.jwt.jwt_refresh_secret!);
 
-  const isExistUser = await User.findById(decoded.id).select('_id email role');
-  if (!isExistUser) {
+  const isExistUser = await User.findById(decoded.id).select(
+    '_id email role status isDeleted',
+  );
+  if (!isExistUser || isExistUser.isDeleted) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  if (isExistUser.status !== UserStatus.Active) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'It looks like your account has been suspended or deactivated.',
+    );
   }
 
   const accessToken = jwtHelper.createToken(

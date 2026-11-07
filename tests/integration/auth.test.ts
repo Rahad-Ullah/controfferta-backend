@@ -4,8 +4,13 @@ import app from '../../src/app';
 import { User } from '../../src/app/modules/user/user.model';
 import { UserRole, UserStatus } from '../../src/app/modules/user/user.constant';
 import { ResetToken } from '../../src/app/modules/resetToken/resetToken.model';
-import { authHeader, createRefreshToken, createTestToken } from '../helpers/auth.helper';
+import {
+  authHeader,
+  createRefreshToken,
+  createTestToken,
+} from '../helpers/auth.helper';
 import { createTestUser } from '../helpers/user.helper';
+import { initEmailWorker } from '../../src/helpers/email.worker';
 import { harness } from '../harness';
 
 describe('Auth API', () => {
@@ -149,6 +154,8 @@ describe('Auth API', () => {
     it('sends an OTP email and verifies it', async () => {
       const { user } = await createTestUser({ isEmailVerified: false });
       harness().sendMailSpy.mockClear();
+      harness().queueAddSpy.mockClear();
+      harness().workerProcessors.length = 0;
 
       const forgetRes = await request(app)
         .post('/api/v1/auth/forget-password')
@@ -156,13 +163,26 @@ describe('Auth API', () => {
 
       expect(forgetRes.status).toBe(200);
       expect(forgetRes.body.success).toBe(true);
+      expect(harness().sendMailSpy).not.toHaveBeenCalled();
+      expect(harness().queueAddSpy).toHaveBeenCalledWith(
+        'send-email',
+        expect.objectContaining({ to: user.email }),
+        expect.any(Object),
+      );
+
+      initEmailWorker();
+      const processor = harness().workerProcessors.at(-1);
+      const queuedEmail = harness().queueAddSpy.mock.calls.at(-1)?.[1];
+      await processor!({ name: 'send-email', data: queuedEmail });
       expect(harness().sendMailSpy).toHaveBeenCalled();
 
       const stored = await User.findById(user._id).select('+authentication');
-      const verifyRes = await request(app).post('/api/v1/auth/verify-email').send({
-        email: user.email,
-        oneTimeCode: stored?.authentication?.oneTimeCode,
-      });
+      const verifyRes = await request(app)
+        .post('/api/v1/auth/verify-email')
+        .send({
+          email: user.email,
+          oneTimeCode: stored?.authentication?.oneTimeCode,
+        });
 
       expect(verifyRes.status).toBe(200);
       expect(verifyRes.body.data).toHaveProperty('accessToken');
@@ -221,8 +241,30 @@ describe('Auth API', () => {
       expect(res.body.data).toHaveProperty('accessToken');
     });
 
+    it('returns 400 when the account is suspended', async () => {
+      const { user } = await createTestUser({
+        email: 'suspended@example.com',
+        status: UserStatus.Suspended,
+      });
+      const refreshToken = createRefreshToken(
+        user.role,
+        user._id.toString(),
+        user.email,
+      );
+
+      const res = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/suspended/i);
+    });
+
     it('returns 400 when the refresh token is missing', async () => {
-      const res = await request(app).post('/api/v1/auth/refresh-token').send({});
+      const res = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({});
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
