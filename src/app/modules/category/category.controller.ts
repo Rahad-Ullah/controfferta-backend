@@ -4,6 +4,7 @@ import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { CategoryServices } from './category.service';
 
+// create category
 const createCategoryController = catchAsync(
   async (req: Request, res: Response) => {
     const result = await CategoryServices.createCategoryService(req.body);
@@ -17,6 +18,7 @@ const createCategoryController = catchAsync(
   },
 );
 
+// update category
 const updateCategoryController = catchAsync(
   async (req: Request, res: Response) => {
     const result = await CategoryServices.updateCategoryService(
@@ -33,6 +35,7 @@ const updateCategoryController = catchAsync(
   },
 );
 
+// delete category
 const deleteCategoryController = catchAsync(
   async (req: Request, res: Response) => {
     const result = await CategoryServices.deleteCategoryService(req.params.id);
@@ -46,6 +49,7 @@ const deleteCategoryController = catchAsync(
   },
 );
 
+// get category by id
 const getCategoryByIdController = catchAsync(
   async (req: Request, res: Response) => {
     const result = await CategoryServices.getCategoryByIdService(req.params.id);
@@ -59,6 +63,7 @@ const getCategoryByIdController = catchAsync(
   },
 );
 
+// get all categories
 const getAllCategoriesController = catchAsync(
   async (req: Request, res: Response) => {
     const result = await CategoryServices.getAllCategoriesService(req.query);

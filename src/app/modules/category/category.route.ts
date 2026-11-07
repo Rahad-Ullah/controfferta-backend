@@ -7,6 +7,7 @@ import { CategoryValidations } from './category.validation';
 
 const router = express.Router();
 
+// create category
 router.post(
   '/create',
   auth(UserRole.Admin, UserRole.SuperAdmin),
@@ -14,6 +15,7 @@ router.post(
   CategoryController.createCategoryController,
 );
 
+// update category
 router.patch(
   '/:id',
   auth(UserRole.Admin, UserRole.SuperAdmin),
@@ -21,6 +23,7 @@ router.patch(
   CategoryController.updateCategoryController,
 );
 
+// delete category
 router.delete(
   '/:id',
   auth(UserRole.Admin, UserRole.SuperAdmin),
@@ -28,12 +31,14 @@ router.delete(
   CategoryController.deleteCategoryController,
 );
 
+// get category by id
 router.get(
   '/:id',
   validateRequest(CategoryValidations.categoryIdValidation),
   CategoryController.getCategoryByIdController,
 );
 
+// get all categories
 router.get(
   '/',
   validateRequest(CategoryValidations.getAllCategoriesValidation),

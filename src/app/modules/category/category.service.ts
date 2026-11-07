@@ -5,9 +5,11 @@ import ApiError from '../../../errors/ApiError';
 import { Category } from './category.model';
 import { ICategory } from './category.interface';
 
+// escape regex characters so a name is matched literally
 const escapeRegex = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// match an active category by name, ignoring case
 const activeNameFilter = (
   name: string,
   excludeId?: string,
@@ -21,11 +23,13 @@ const activeNameFilter = (
   return filter;
 };
 
+// ---------------- create category ----------------
 const createCategoryService = async (
   payload: Pick<ICategory, 'name' | 'description' | 'creditCost'> & {
     iconUrl?: string;
   },
 ): Promise<ICategory> => {
+  // check if category name is already exists
   const existing = await Category.exists(activeNameFilter(payload.name));
   if (existing) {
     throw new ApiError(StatusCodes.CONFLICT, 'Category already exists');
@@ -35,12 +39,14 @@ const createCategoryService = async (
   return result;
 };
 
+// ---------------- update category ----------------
 const updateCategoryService = async (
   id: string,
   payload: Partial<
     Pick<ICategory, 'name' | 'description' | 'iconUrl' | 'creditCost'>
   >,
 ): Promise<ICategory> => {
+  // check if category name is already exists
   if (payload.name) {
     const existing = await Category.exists(activeNameFilter(payload.name, id));
     if (existing) {
@@ -61,7 +67,9 @@ const updateCategoryService = async (
   return result;
 };
 
+// ---------------- delete category ----------------
 const deleteCategoryService = async (id: string): Promise<ICategory> => {
+  // soft delete so the name can be used again
   const result = await Category.findOneAndUpdate(
     { _id: id, isDeleted: false },
     { isDeleted: true },
@@ -75,6 +83,7 @@ const deleteCategoryService = async (id: string): Promise<ICategory> => {
   return result;
 };
 
+// ---------------- get category by id ----------------
 const getCategoryByIdService = async (id: string): Promise<ICategory> => {
   const result = await Category.findOne({ _id: id, isDeleted: false });
 
@@ -85,6 +94,7 @@ const getCategoryByIdService = async (id: string): Promise<ICategory> => {
   return result;
 };
 
+// ---------------- get all categories ----------------
 const getAllCategoriesService = async (query: Record<string, unknown>) => {
   const categoryQuery = new QueryBuilder(
     Category.find({ isDeleted: false }),
