@@ -26,7 +26,7 @@ const price = z
   .int('Price must be a whole number of cents')
   .min(MINIMUM_PACKAGE_PRICE, 'Price must be at least 50 cents');
 
-const tag = z.nativeEnum(CreditPackageTag);
+const tag = z.nativeEnum(CreditPackageTag).nullable();
 const status = z.nativeEnum(CreditPackageStatus);
 
 const listQuery = {
