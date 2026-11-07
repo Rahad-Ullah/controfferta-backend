@@ -1,0 +1,112 @@
+import { z } from 'zod';
+import { UserRole, UserStatus } from './user.constant';
+import { objectId } from '../../../shared/objectIdValidator';
+
+const createUserZodSchema = z.object({
+  body: z
+    .object({
+      firstName: z.string({ required_error: 'First name is required' }),
+      lastName: z.string({ required_error: 'Last name is required' }),
+      role: z.enum([UserRole.Client, UserRole.Provider]),
+      email: z
+        .string({ required_error: 'Email is required' })
+        .email('Invalid email address'),
+      password: z
+        .string({ required_error: 'Password is required' })
+        .min(8, 'Password must be at least 8 characters long'),
+      phone: z
+        .object({
+          countryCode: z.string().min(1).max(5).optional(),
+          number: z.string().optional(),
+        })
+        .optional(),
+    })
+    .strict(),
+});
+
+const updateUserZodSchema = z.object({
+  body: z
+    .object({
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      image: z.union([z.string().url(), z.literal('')]).optional(),
+      phone: z
+        .object({
+          countryCode: z.string().max(5).optional(),
+          number: z.string().optional(),
+        })
+        .optional(),
+      address: z
+        .object({
+          line1: z.string().optional(),
+          line2: z.string().optional(),
+          city: z.string().optional(),
+          state: z.string().optional(),
+          country: z.string().optional(),
+          postalCode: z.string().optional(),
+        })
+        .optional(),
+      location: z
+        .object({
+          type: z.string().optional(),
+          coordinates: z.array(z.number()).optional(),
+        })
+        .optional(),
+      isNotificationEnabled: z.boolean().optional(),
+    })
+    .strict(),
+});
+
+const updateStatusZodSchema = z.object({
+  params: z
+    .object({
+      id: objectId('user id'),
+    })
+    .strict(),
+  body: z
+    .object({
+      status: z.nativeEnum(UserStatus, {
+        required_error: 'Status is required',
+      }),
+    })
+    .strict(),
+});
+
+// delete user
+const deleteUserZodSchema = z.object({
+  params: z
+    .object({
+      id: objectId('user id'),
+    })
+    .strict(),
+});
+
+// get single user
+const getSingleUserZodSchema = z.object({
+  params: z
+    .object({
+      id: objectId('user id'),
+    })
+    .strict(),
+});
+
+// get all users
+const getAllUsersZodSchema = z.object({
+  query: z
+    .object({
+      searchTerm: z.string().optional(),
+      status: z.nativeEnum(UserStatus).optional(),
+      page: z.number().optional(),
+      limit: z.number().optional(),
+    })
+    .strict(),
+});
+
+export const UserValidation = {
+  createUserZodSchema,
+  updateUserZodSchema,
+  updateStatusZodSchema,
+  deleteUserZodSchema,
+  getSingleUserZodSchema,
+  getAllUsersZodSchema,
+};

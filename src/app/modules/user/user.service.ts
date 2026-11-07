@@ -1,0 +1,206 @@
+import { StatusCodes } from 'http-status-codes';
+import { JwtPayload } from 'jsonwebtoken';
+import ApiError from '../../../errors/ApiError';
+import { emailHelper } from '../../../helpers/emailHelper';
+import { emailTemplate } from '../../../shared/emailTemplate';
+import deleteS3File from '../../../shared/deleteS3File';
+import generateOTP from '../../../utils/generateOTP';
+import { IUser } from './user.interface';
+import { User } from './user.model';
+import { UserRole, UserStatus } from './user.constant';
+import QueryBuilder from '../../builder/QueryBuilder';
+import mongoose from 'mongoose';
+import { sendNotifications } from '../../../helpers/notificationHelper';
+import { NotificationType } from '../notification/notification.constant';
+import { MediaUploadServices } from '../mediaUpload/mediaUpload.service';
+
+const createUserToDB = async (payload: Partial<IUser>) => {
+  const session = await mongoose.startSession();
+
+  try {
+    session.startTransaction();
+
+    // Check if user exists
+    const isExistUser = await User.exists({ email: payload.email }).session(
+      session,
+    );
+    if (isExistUser) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Email already exists!');
+    }
+
+    // Create user
+    const [createdUser] = await User.create([payload], { session });
+    if (!createdUser) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Failed to create user');
+    }
+
+    // Generate OTP
+    const otp = generateOTP(6);
+    const values = {
+      name: createdUser.firstName,
+      otp: otp,
+      email: createdUser.email!,
+    };
+
+    const createAccountTemplate = emailTemplate.createAccount(values);
+    await emailHelper.sendEmail(createAccountTemplate);
+
+    // Save OTP to DB
+    const authentication = {
+      oneTimeCode: otp,
+      expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+    };
+
+    await User.findOneAndUpdate(
+      { _id: createdUser._id },
+      { $set: { authentication } },
+      { session, new: true },
+    );
+
+    await session.commitTransaction();
+
+    return {
+      message: 'Account created successfully. Please verify your email.',
+    };
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+};
+
+const getSingleUserFromDB = async (id: string) => {
+  const result = await User.findById(id).populate('roleRef');
+  if (!result) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  return result;
+};
+
+const getProfileFromDB = async (id: string): Promise<Partial<IUser>> => {
+  const user = await User.findById(id).populate('roleRef');
+  if (!user) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  // check if user is deleted
+  if (user.isDeleted) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'It looks like your account has been deleted or deactivated.',
+    );
+  }
+
+  //check user status
+  if (user.status !== UserStatus.Active) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'It looks like your account has been suspended or deactivated.',
+    );
+  }
+
+  return user;
+};
+
+const updateProfileToDB = async (
+  user: JwtPayload,
+  payload: Partial<IUser>,
+): Promise<Partial<IUser | null>> => {
+  const { id } = user;
+  const existingUser = await User.findById(id).select('_id image');
+  if (!existingUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  const result = await User.findByIdAndUpdate(id, payload, {
+    new: true,
+  });
+
+  // mark the new file as used
+  if (payload.image) {
+    await MediaUploadServices.markMediaAsUsed(payload.image);
+  }
+
+  // unlink old file from s3
+  if (
+    payload.image &&
+    existingUser.image &&
+    payload.image !== existingUser.image
+  ) {
+    deleteS3File(existingUser.image).catch(err => console.error(err));
+  }
+
+  return result;
+};
+
+// ------------ update user status ------------
+const updateStatusToDB = async (
+  id: string,
+  payload: { status: UserStatus },
+): Promise<Partial<IUser | null>> => {
+  const result = await User.findByIdAndUpdate(id, payload, { new: true });
+
+  if (!result) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!');
+  }
+
+  // send notification to user
+  sendNotifications({
+    type: NotificationType.AccountUpdated,
+    receiver: result?._id,
+    title: 'Account Status Updated',
+    message: `Your account has been ${payload.status.toLowerCase()}`,
+    referenceId: result?._id.toString(),
+  }).catch(err => console.error(err));
+
+  return result;
+};
+
+// ------------ delete user ------------
+const deleteSingleUserFromDB = async (
+  userId: string,
+): Promise<Partial<IUser>> => {
+  const result = await User.findByIdAndUpdate(
+    userId,
+    { isDeleted: true },
+    { new: true },
+  );
+  if (!result) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+  return result;
+};
+
+// ------------ get all users ------------
+const getAllUsersFromDB = async (query: Record<string, unknown>) => {
+  const userQuery = new QueryBuilder(
+    User.find({ isDeleted: false, role: { $ne: UserRole.SuperAdmin } }),
+    query,
+  )
+    .search(['firstName', 'lastName', 'email'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  const [data, pagination] = await Promise.all([
+    userQuery.modelQuery.populate('roleRef').lean(),
+    userQuery.getPaginationInfo(),
+  ]);
+
+  return { data, pagination };
+};
+
+export const UserService = {
+  createUserToDB,
+  getSingleUserFromDB,
+  getProfileFromDB,
+  updateProfileToDB,
+  updateStatusToDB,
+  deleteSingleUserFromDB,
+  getAllUsersFromDB,
+};

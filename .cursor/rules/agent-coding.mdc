@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+# Writing code in this repo
+
+Follow `AGENTS.md`.
+
+- Read the module you are changing and copy its file layout, naming, and request flow: `auth`, `validateRequest`, thin `catchAsync` controller, service that throws `ApiError`, Zod schema in the validation file.
+- Put a new feature in `src/app/modules/<camelName>/`. Register it in `src/routes/index.ts`. Use `npm run cm` for a new module.
+- Keep the change small. Do not rewrite unrelated files or replace a helper the project already has.
+- Do not change public paths, status codes, auth rules, or response messages unless the task requires it. Keep `POST /webhooks/stripe` on `express.raw` before `express.json`.
+- After the edit, run `npx tsc --noEmit` and `npm test`, or the test file for that area. Add or update a test for the behavior you changed. Tests must keep using the mocks in `tests/setup.ts`.

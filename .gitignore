@@ -1,0 +1,17 @@
+node_modules
+dist
+
+# package manager locks
+package-lock.json
+yarn.lock
+
+# environment variables
+.env
+
+# local files
+/winston
+/uploads
+/coverage
+
+# code editor
+.vscode

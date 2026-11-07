@@ -1,0 +1,66 @@
+services:
+  # --- Development Service ---
+  server-dev:
+    profiles: ['dev']
+    build:
+      context: .
+      target: dev
+    env_file:
+      - .env
+    ports:
+      - '${PORT_DEV}:${PORT_DEV}'
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+
+    develop:
+      watch:
+        - action: rebuild
+          path: ./package.json
+
+        - action: rebuild
+          path: ./package-lock.json
+
+        - action: sync
+          path: ./src
+          target: /app/src
+
+        - action: sync+restart
+          path: ./tsconfig.json
+          target: /app/tsconfig.json
+
+        - action: sync+restart
+          path: ./.env
+          target: /app/.env
+
+  # --- Production Service ---
+  server-prod:
+    profiles: ['prod']
+    build:
+      context: .
+      target: prod
+    env_file:
+      - .env
+    ports:
+      - '${PORT}:${PORT}'
+
+  # --- Shared Databases (Starts with either environment) ---
+#   mongodb:
+#     image: mongo:latest
+#     ports:
+#       - '27018:27017'
+#     volumes:
+#       - mongodb_data:/data/db
+#     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+
+#   redis:
+#     image: redis:latest
+#     ports:
+#       - '6380:6379'
+#     volumes:
+#       - redis_data:/data
+#     command: ['redis-server', '--appendonly', 'yes']
+
+# volumes:
+#   mongodb_data:
+#   redis_data:
