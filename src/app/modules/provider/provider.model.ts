@@ -17,7 +17,7 @@ const providerSchema = new Schema<IProvider, ProviderModel>({
   businessType: {
     type: String,
     enum: Object.values(BusinessType),
-    required: true,
+    default: BusinessType.Company,
   },
   bio: {
     type: String,

@@ -25,9 +25,7 @@ const providerFields = {
     .string({ required_error: 'Business name is required' })
     .trim()
     .min(1, 'Business name is required'),
-  businessType: z.nativeEnum(BusinessType, {
-    required_error: 'Business type is required',
-  }),
+  businessType: z.nativeEnum(BusinessType).optional(),
   bio: z.string().optional(),
   interestedCategories: z.array(objectId('category')).optional(),
 };
