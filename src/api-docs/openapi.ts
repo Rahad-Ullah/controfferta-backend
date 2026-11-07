@@ -3,6 +3,7 @@ import {
   OpenApiGeneratorV3,
 } from '@asteasolutions/zod-to-openapi';
 import { registerAuthDocs } from '../app/modules/auth/auth.doc';
+import { registerCategoryDocs } from '../app/modules/category/category.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -18,6 +19,7 @@ registry.registerComponent('securitySchemes', 'bearerAuth', {
 export function generateOpenApiDocumentV1() {
   registerAuthDocs();
   registerUserDocs();
+  registerCategoryDocs();
 
   const generator = new OpenApiGeneratorV3(registry.definitions);
 
