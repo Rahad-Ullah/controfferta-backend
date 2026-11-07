@@ -1,11 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { ChatServices } from './chat.service';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 
 // create chat
 const createChat = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const result = await ChatServices.createChatIntoDB(req.user, req.body);
 
     sendResponse(res, {
@@ -19,7 +19,7 @@ const createChat = catchAsync(
 
 // delete chat
 const deleteChat = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const result = await ChatServices.deleteChatFromDB(req.params.id);
 
     sendResponse(res, {
@@ -33,7 +33,7 @@ const deleteChat = catchAsync(
 
 // get single chat
 const getSingleChat = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const result = await ChatServices.getSingleChatFromDB(req.params.id, req.user.id);
 
     sendResponse(res, {
@@ -47,7 +47,7 @@ const getSingleChat = catchAsync(
 
 // getMy chat
 const getMyChats = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const result = await ChatServices.getMyChatsFromDB(req.user, req.query);
 
     sendResponse(res, {

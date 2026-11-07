@@ -30,7 +30,6 @@ export const createMessage = async (payload: IMessage): Promise<IMessage> => {
   const populatedResult = await result.populate('sender', 'name image isDeleted');
 
   // emit socket event for new message
-  //@ts-ignore
   const io = global.io;
   if (io) {
     // 🔔 emit message to chat room

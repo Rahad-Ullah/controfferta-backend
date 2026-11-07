@@ -80,15 +80,15 @@ describe('User API', () => {
     const forbidden = await request(app)
       .patch(`/api/v1/users/${user._id}/status`)
       .set('Authorization', authHeader(userToken))
-      .send({ status: UserStatus.Inactive });
+      .send({ status: UserStatus.Suspended });
     expect(forbidden.status).toBe(403);
 
     const statusRes = await request(app)
       .patch(`/api/v1/users/${user._id}/status`)
       .set('Authorization', authHeader(adminToken))
-      .send({ status: UserStatus.Inactive });
+      .send({ status: UserStatus.Suspended });
     expect(statusRes.status).toBe(200);
-    expect(statusRes.body.data.status).toBe(UserStatus.Inactive);
+    expect(statusRes.body.data.status).toBe(UserStatus.Suspended);
 
     const list = await request(app)
       .get('/api/v1/users/all')

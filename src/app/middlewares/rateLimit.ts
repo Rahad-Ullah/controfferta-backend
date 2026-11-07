@@ -69,7 +69,7 @@ export const rateLimiter = ({
       );
     },
     store: new RedisStore({
-      // @ts-ignore
+      // @ts-expect-error ioredis call overloads do not match the store command type
       sendCommand: (command: string, ...args: string[]) =>
         redis.call(command, ...args),
       prefix: `rl:${prefix}:`,

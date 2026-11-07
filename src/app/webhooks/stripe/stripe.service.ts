@@ -12,7 +12,6 @@ import {
   SupportedCurrency,
 } from '../../modules/wallet/wallet.constants';
 import { Wallet } from '../../modules/wallet/wallet.model';
-import { sendNotifications } from '../../../helpers/notificationHelper';
 
 // ----------------- on checkout session completed -----------------
 const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
@@ -235,7 +234,7 @@ const onRefundSuccess = async (event: Stripe.Event) => {
   const charge = event.data.object as Stripe.Charge;
   const paymentIntentId = charge.payment_intent as string;
 
-  const { userId, referenceType, transactionId } = charge.metadata || {};
+  const { transactionId } = charge.metadata || {};
 
   if (!paymentIntentId) {
     console.error(

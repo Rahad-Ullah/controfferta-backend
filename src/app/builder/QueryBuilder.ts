@@ -40,7 +40,7 @@ class QueryBuilder<T> {
 
   //sorting
   sort() {
-    let sort = (this?.query?.sort as string) || '-createdAt';
+    const sort = (this?.query?.sort as string) || '-createdAt';
     this.modelQuery = this.modelQuery.sort(sort);
 
     return this;
@@ -48,9 +48,9 @@ class QueryBuilder<T> {
 
   //pagination
   paginate() {
-    let limit = Number(this?.query?.limit) || 10;
-    let page = Number(this?.query?.page) || 1;
-    let skip = (page - 1) * limit;
+    const limit = Number(this?.query?.limit) || 10;
+    const page = Number(this?.query?.page) || 1;
+    const skip = (page - 1) * limit;
 
     this.modelQuery = this.modelQuery.skip(skip).limit(limit);
 
@@ -59,7 +59,7 @@ class QueryBuilder<T> {
 
   //fields filtering
   fields() {
-    let fields =
+    const fields =
       (this?.query?.fields as string)?.split(',').join(' ') || '-__v';
     this.modelQuery = this.modelQuery.select(fields);
 

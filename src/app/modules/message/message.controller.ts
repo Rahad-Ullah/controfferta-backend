@@ -23,7 +23,7 @@ const createMessage = catchAsync(
         payload.content = payload.text.trim();
         delete payload.text;
         break;
-      case MessageType.Image:
+      case MessageType.Image: {
         const imagePath = getSingleFilePath(req.files, 'image');
         if (!imagePath) {
           return next(
@@ -33,7 +33,8 @@ const createMessage = catchAsync(
         payload.content = imagePath;
         delete payload.image;
         break;
-      case MessageType.Media:
+      }
+      case MessageType.Media: {
         const mediaPath = getSingleFilePath(req.files, 'media');
         if (!mediaPath) {
           return next(
@@ -43,7 +44,8 @@ const createMessage = catchAsync(
         payload.content = mediaPath;
         delete payload.media;
         break;
-      case MessageType.Document:
+      }
+      case MessageType.Document: {
         const docPath = getSingleFilePath(req.files, 'doc');
         if (!docPath) {
           return next(
@@ -53,6 +55,7 @@ const createMessage = catchAsync(
         payload.content = docPath;
         delete payload.doc;
         break;
+      }
     }
 
     const result = await MessageServices.createMessage(payload);
@@ -68,7 +71,7 @@ const createMessage = catchAsync(
 
 // ----------------- get messages by chat id -------------------
 const getChatMessages = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response) => {
     const chatId = req.params.chatId;
     const user = req.user;
 

@@ -140,7 +140,6 @@ async function main() {
       },
     });
     socketHelper.socket(io);
-    //@ts-ignore
     global.io = io;
     logger.info(colors.magenta('🛜  Socket connected successfully'));
 

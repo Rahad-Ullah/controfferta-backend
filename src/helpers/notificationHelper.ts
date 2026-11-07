@@ -10,7 +10,6 @@ export const sendNotifications = async (
     await Notification.create(data);
   }
 
-  //@ts-ignore
   const io = global.io;
 
   try {
@@ -19,7 +18,7 @@ export const sendNotifications = async (
     }
   } catch (error) {
     console.error(`Error while sending notification: ${error}`);
-    io.emit('error', error);
+    io?.emit('error', error);
   }
 
   return 'Notification sent successfully';
