@@ -33,7 +33,6 @@ router.delete(
 // get lead feed
 router.get(
   '/',
-  auth(UserRole.Provider, UserRole.Admin, UserRole.SuperAdmin),
   validateRequest(LeadValidations.leadFeedValidation),
   LeadController.getLeadFeedController,
 );
