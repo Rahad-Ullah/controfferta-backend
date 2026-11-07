@@ -12,6 +12,7 @@ import { MessageRoutes } from '../app/modules/message/message.route';
 import { supportRoutes } from '../app/modules/support/support.route';
 import { faqRoutes } from '../app/modules/faq/faq.route';
 import { categoryRoutes } from '../app/modules/category/category.route';
+import { leadRoutes } from '../app/modules/lead/lead.route';
 import { mediaUploadRoutes } from '../app/modules/mediaUpload/mediaUpload.route';
 const router = express.Router();
 
@@ -63,6 +64,10 @@ const apiRoutes: { path: string; route: any }[] = [
   {
     path: '/categories',
     route: categoryRoutes,
+  },
+  {
+    path: '/leads',
+    route: leadRoutes,
   },
   {
     path: '/disclaimers',

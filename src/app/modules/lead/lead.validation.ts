@@ -1,0 +1,137 @@
+import { z } from 'zod';
+import { objectId } from '../../../shared/objectIdValidator';
+import { LeadStatus } from './lead.constant';
+
+const optionalObjectId = (fieldName: string) =>
+  z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, `${fieldName} must be a valid object id`)
+    .optional();
+
+const dateString = z
+  .string()
+  .refine(value => !Number.isNaN(Date.parse(value)), 'Invalid date');
+
+const createLeadValidation = z.object({
+  body: z
+    .object({
+      category: objectId('category'),
+      title: z
+        .string({ required_error: 'Title is required' })
+        .trim()
+        .min(1, 'Title is required'),
+      description: z
+        .string({ required_error: 'Description is required' })
+        .trim()
+        .min(1, 'Description is required'),
+      address: z
+        .string({ required_error: 'Address is required' })
+        .trim()
+        .min(1, 'Address is required'),
+      location: z
+        .object({
+          type: z.literal('Point').optional(),
+          coordinates: z.tuple([
+            z.number().min(-180).max(180),
+            z.number().min(-90).max(90),
+          ]),
+        })
+        .optional(),
+      budgetRange: z
+        .object({
+          minimum: z.number({ required_error: 'Minimum budget is required' }),
+          maximum: z.number({ required_error: 'Maximum budget is required' }),
+        })
+        .refine(range => range.minimum <= range.maximum, {
+          message: 'Minimum budget cannot be greater than the maximum',
+          path: ['minimum'],
+        }),
+      timeline: z
+        .string({ required_error: 'Timeline is required' })
+        .trim()
+        .min(1, 'Timeline is required'),
+      client: z.object({
+        name: z
+          .string({ required_error: 'Client name is required' })
+          .trim()
+          .min(1, 'Client name is required'),
+        email: z
+          .string({ required_error: 'Client email is required' })
+          .email('Invalid email address'),
+        phone: z.object({
+          countryCode: z
+            .string({ required_error: 'Country code is required' })
+            .trim()
+            .min(1)
+            .max(5),
+          number: z
+            .string({ required_error: 'Phone number is required' })
+            .trim()
+            .min(1, 'Phone number is required'),
+        }),
+        address: z
+          .string({ required_error: 'Client address is required' })
+          .trim()
+          .min(1, 'Client address is required'),
+      }),
+    })
+    .strict(),
+});
+
+const updateLeadStatusValidation = z.object({
+  params: z
+    .object({
+      id: objectId('lead id'),
+    })
+    .strict(),
+  body: z
+    .object({
+      status: z.nativeEnum(LeadStatus, {
+        required_error: 'Status is required',
+      }),
+    })
+    .strict(),
+});
+
+const leadIdValidation = z.object({
+  params: z
+    .object({
+      id: objectId('lead id'),
+    })
+    .strict(),
+});
+
+const leadFeedValidation = z.object({
+  query: z
+    .object({
+      searchTerm: z.string().optional(),
+      category: optionalObjectId('category'),
+      from: dateString.optional(),
+      to: dateString.optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+      sort: z.string().optional(),
+    })
+    .strict(),
+});
+
+const getAllLeadsValidation = z.object({
+  query: z
+    .object({
+      searchTerm: z.string().optional(),
+      category: optionalObjectId('category'),
+      status: z.nativeEnum(LeadStatus).optional(),
+      page: z.string().optional(),
+      limit: z.string().optional(),
+      sort: z.string().optional(),
+    })
+    .strict(),
+});
+
+export const LeadValidations = {
+  createLeadValidation,
+  updateLeadStatusValidation,
+  leadIdValidation,
+  leadFeedValidation,
+  getAllLeadsValidation,
+};

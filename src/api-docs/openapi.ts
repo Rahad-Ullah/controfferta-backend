@@ -4,6 +4,7 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { registerAuthDocs } from '../app/modules/auth/auth.doc';
 import { registerCategoryDocs } from '../app/modules/category/category.doc';
+import { registerLeadDocs } from '../app/modules/lead/lead.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -20,6 +21,7 @@ export function generateOpenApiDocumentV1() {
   registerAuthDocs();
   registerUserDocs();
   registerCategoryDocs();
+  registerLeadDocs();
 
   const generator = new OpenApiGeneratorV3(registry.definitions);
 
