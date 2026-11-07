@@ -1,10 +1,6 @@
 node_modules
 dist
 
-# package manager locks
-package-lock.json
-yarn.lock
-
 # environment variables
 .env
 

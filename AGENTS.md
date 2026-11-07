@@ -25,6 +25,7 @@ Keep new code in the same places as the existing code.
 | OpenAPI | `src/api-docs/` and `<module>.doc.ts` |
 | Stripe webhook | `src/app/webhooks/stripe/` |
 | Tests | `tests/integration`, `tests/unit`, `tests/workers`, `tests/helpers` |
+| Domain model for new modules | `docs/erd.md` |
 
 A module uses these files, named after the folder:
 
@@ -32,7 +33,7 @@ A module uses these files, named after the folder:
 
 Create a module with `npm run cm <name>`. The script writes those files and registers the router. Fill the generated files in. Do not invent a second folder shape such as `controllers/` or `services/` at the repo root.
 
-Roles are `user`, `admin`, and `super_admin` from `UserRole` in `src/app/modules/user/user.constant.ts`. Public signup accepts `user` only. Admins are created by a super admin.
+Roles are `client`, `provider`, `admin`, and `super_admin` from `UserRole` in `src/app/modules/user/user.constant.ts`. Public signup accepts `client` and `provider`. Admins are created by a super admin. New domain modules follow `docs/erd.md`.
 
 ## How a request is written
 
