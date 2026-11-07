@@ -47,7 +47,7 @@ const createStripePrice = (productId: string, unitAmount: number) =>
   stripe.prices.create({
     product: productId,
     currency: CREDIT_CURRENCY.toLowerCase(),
-    unit_amount: unitAmount,
+    unit_amount: unitAmount * 100,  // convert to cents
   });
 
 // ---------------- create credit package ----------------

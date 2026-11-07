@@ -23,8 +23,8 @@ const creditsAmount = z
 
 const price = z
   .number({ required_error: 'Price is required' })
-  .int('Price must be a whole number of cents')
-  .min(MINIMUM_PACKAGE_PRICE, 'Price must be at least 50 cents');
+  .int('Price must be a whole number of euros')
+  .min(MINIMUM_PACKAGE_PRICE, 'Price must be at least 1 euro');
 
 const tag = z.nativeEnum(CreditPackageTag).nullable();
 const status = z.nativeEnum(CreditPackageStatus);

@@ -84,7 +84,7 @@ describe('Credit purchase API', () => {
         name: 'Starter',
         description: '100 credits',
         creditsAmount: 100,
-        price: 4900,
+        price: 49,
       });
     expect(createdPackage.status).toBe(201);
     const packageId = createdPackage.body.data._id;
@@ -143,13 +143,13 @@ describe('Credit purchase API', () => {
     );
     expect(started.body.data.purchase.creditsAmount).toBe(100);
     expect(started.body.data.purchase.pricing).toMatchObject({
-      subtotal: 4900,
+      subtotal: 49,
       discount: 0,
-      total: 4900,
+      total: 49,
       currency: 'EUR',
     });
     expect(started.body.data.transaction).toMatchObject({
-      amount: 4900,
+      amount: 49,
       currency: 'EUR',
       status: TransactionStatus.Pending,
       isPaid: false,
@@ -223,20 +223,20 @@ describe('Credit purchase API', () => {
     expect(view.status).toBe(200);
     expect(view.body.data.paymentStatus).toBe(CreditPaymentStatus.Paid);
     expect(view.body.data.transaction).toMatchObject({
-      amount: 4900,
+      amount: 49,
       currency: 'EUR',
       status: TransactionStatus.Completed,
       isPaid: true,
-      gatewayFee: 100,
+      gatewayFee: 1,
       gatewayReferenceId: 'pi_test_mock123',
     });
 
     const transactions = await request(app)
-      .get('/api/v1/transactions')
+      .get('/api/v1/transactions/all')
       .set('Authorization', authHeader(adminToken));
     expect(transactions.status).toBe(200);
     expect(transactions.body.data[0].reference.id.uid).toMatch(/^PUR-/);
-    expect(transactions.body.data[0].amount).toBe(4900);
+    expect(transactions.body.data[0].amount).toBe(49);
 
     const sold = await request(app)
       .get(`/api/v1/credit-packages/${packageId}`)

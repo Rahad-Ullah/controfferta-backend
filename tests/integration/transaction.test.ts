@@ -34,7 +34,7 @@ describe('Transaction API', () => {
     });
 
     const mine = await request(app)
-      .get('/api/v1/transactions/my-transactions')
+      .get('/api/v1/transactions/me')
       .set('Authorization', authHeader(token));
     expect(mine.status).toBe(200);
     expect(mine.body.data).toEqual(
@@ -44,12 +44,12 @@ describe('Transaction API', () => {
     );
 
     const forbidden = await request(app)
-      .get('/api/v1/transactions')
+      .get('/api/v1/transactions/all')
       .set('Authorization', authHeader(token));
     expect(forbidden.status).toBe(403);
 
     const all = await request(app)
-      .get('/api/v1/transactions')
+      .get('/api/v1/transactions/all')
       .set('Authorization', authHeader(adminToken));
     expect(all.status).toBe(200);
 

@@ -12,7 +12,9 @@ import {
   SupportedCurrency,
 } from '../../modules/wallet/wallet.constants';
 import { Wallet } from '../../modules/wallet/wallet.model';
-import { CreditPurchaseServices } from '../../modules/creditPurchase/creditPurchase.service';
+import { CreditPaymentStatus } from '../../modules/creditPurchase/creditPurchase.constant';
+import { CreditPurchase } from '../../modules/creditPurchase/creditPurchase.model';
+import { StripeFulfillment } from './stripe.fulfillment';
 
 // ----------------- on checkout session completed -----------------
 const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
@@ -21,9 +23,11 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
   // 1. Extract custom metadata
   const { userId, referenceType, referenceId } = session.metadata || {};
 
-  // credit purchases keep the amount in euro cents and mark the purchase paid
-  if (referenceType === TransactionReferenceType.CreditPurchase) {
-    await CreditPurchaseServices.completeCreditPurchaseFromCheckout(session);
+  // an async method sends completed while the payment is still unpaid
+  if (
+    referenceType === TransactionReferenceType.CreditPurchase &&
+    session.payment_status !== 'paid'
+  ) {
     return;
   }
 
@@ -32,6 +36,16 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
       `[Stripe Webhook Error] Missing crucial metadata for session: ${session.id}`,
     );
     return;
+  }
+
+  // a repeat event already marked the purchase paid, so the fee is not read again
+  if (referenceType === TransactionReferenceType.CreditPurchase) {
+    const unpaidPurchase = await CreditPurchase.exists({
+      _id: referenceId,
+      isDeleted: false,
+      paymentStatus: CreditPaymentStatus.Unpaid,
+    });
+    if (!unpaidPurchase) return;
   }
 
   // 2. Capture the Stripe Payment Intent ID (Crucial for processing future refunds)
@@ -52,41 +66,62 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
   const isPaid = session.payment_status === 'paid';
 
   try {
-    // 4. update the formal Transaction document inside your MongoDB ledger
-    const transaction = await Transaction.findOneAndUpdate(
-      {
-        gateway: TransactionGateway.Stripe,
-        gatewayReferenceId: session.id,
-      },
-      {
-        user: userId,
-        reference: {
-          type: referenceType as TransactionReferenceType,
-          id: referenceId,
+    // 4. A credit purchase already has its transaction in euros. Any other
+    // checkout is recorded from this event.
+    const transaction = referenceType === TransactionReferenceType.CreditPurchase ?
+      await Transaction.findOne({
+        'reference.type': TransactionReferenceType.CreditPurchase,
+        'reference.id': referenceId,
+      })
+      : await Transaction.findOneAndUpdate(
+        {
+          gateway: TransactionGateway.Stripe,
+          gatewayReferenceId: session.id,
         },
-        type: TransactionType.Payment,
-        gateway: TransactionGateway.Stripe,
-        gatewayReferenceId: paymentIntentId,
-        paymentMethod: session.payment_method_types?.[0] || 'card',
-        amount: totalAmount,
-        gatewayFee: gatewayFee,
-        platformFeePercentage: platformFeePercentage,
-        platformFee: platformFee,
-        netAmount: netAmount,
-        currency: session.currency?.toUpperCase() || 'USD',
-        status: isPaid ? TransactionStatus.Completed : TransactionStatus.Failed,
-        isPaid: isPaid,
-        paidAt: isPaid ? new Date() : undefined,
-      },
-      { upsert: true, new: true },
-    );
+        {
+          user: userId,
+          reference: {
+            type: referenceType as TransactionReferenceType,
+            id: referenceId,
+          },
+          type: TransactionType.Payment,
+          gateway: TransactionGateway.Stripe,
+          gatewayReferenceId: paymentIntentId,
+          paymentMethod: session.payment_method_types?.[0] || 'card',
+          amount: totalAmount,
+          gatewayFee: gatewayFee,
+          platformFeePercentage: platformFeePercentage,
+          platformFee: platformFee,
+          netAmount: netAmount,
+          currency: session.currency?.toUpperCase() || 'USD',
+          status: isPaid
+            ? TransactionStatus.Completed
+            : TransactionStatus.Failed,
+          isPaid: isPaid,
+          paidAt: isPaid ? new Date() : undefined,
+        },
+        { upsert: true, new: true },
+      );
+
+    if (!transaction) {
+      console.error(
+        `[Stripe Webhook Error] No transaction for session ${session.id}`,
+      );
+      return;
+    }
 
     console.log(
       `[Stripe Webhook Success] Transaction logged successfully: ${transaction._id}`,
     );
 
-    // 5. Trigger Fulfiment Logic Below
-    // todo: trigger fulfillment logic based on referenceType
+    // 5. Fulfill the paid reference with the Stripe fee from this event
+    if (referenceType === TransactionReferenceType.CreditPurchase) {
+      await StripeFulfillment.fulfillCreditPurchase(referenceId, {
+        gatewayFee,
+        paymentIntentId,
+        paymentMethod: session.payment_method_types?.[0] || 'card',
+      });
+    }
   } catch (error: any) {
     console.error(
       `[Database Error] Failed to log transaction for session ${session.id}:`,
@@ -100,28 +135,6 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
 const onAsyncPaymentFailed = async (event: Stripe.Event) => {
   const session = event.data.object as Stripe.Checkout.Session;
 
-  if (
-    session.metadata?.referenceType === TransactionReferenceType.CreditPurchase
-  ) {
-    await CreditPurchaseServices.failCreditPurchaseFromCheckout(
-      session,
-      TransactionStatus.Failed,
-    );
-    return;
-  }
-
-  const paymentIntentId = session.payment_intent as string;
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
-    expand: ['latest_charge.balance_transaction'],
-  });
-  const balanceTransaction = (paymentIntent.latest_charge as Stripe.Charge)
-    ?.balance_transaction as Stripe.BalanceTransaction;
-  const totalAmount = balanceTransaction.amount / 100;
-  const gatewayFee = balanceTransaction?.fee / 100 || 0;
-  const platformFeePercentage = 0;
-  const platformFee = (totalAmount * platformFeePercentage) / 100;
-  const netAmount = totalAmount - platformFee;
-
   // 1. Extract custom metadata
   const { userId, referenceType, referenceId } = session.metadata || {};
   if (!userId || !referenceType || !referenceId) {
@@ -131,12 +144,27 @@ const onAsyncPaymentFailed = async (event: Stripe.Event) => {
     return;
   }
 
+  const paymentIntentId = session.payment_intent as string;
+  const paymentIntent = await stripe.paymentIntents.retrieve(
+    paymentIntentId,
+    {
+      expand: ['latest_charge.balance_transaction'],
+    },
+  );
+  const balanceTransaction = (paymentIntent.latest_charge as Stripe.Charge)
+    ?.balance_transaction as Stripe.BalanceTransaction;
+  const totalAmount = balanceTransaction.amount / 100;
+  const gatewayFee = balanceTransaction?.fee / 100 || 0;
+  const platformFeePercentage = 0;
+  const platformFee = (totalAmount * platformFeePercentage) / 100;
+  const netAmount = totalAmount - platformFee;
+
   try {
     // 2. Update or create the transaction document to mark it as Failed
     const transaction = await Transaction.findOneAndUpdate(
       {
         gateway: TransactionGateway.Stripe,
-        gatewayReferenceId: paymentIntentId,
+        gatewayReferenceId: session.id,
       },
       {
         $set: {
@@ -162,15 +190,25 @@ const onAsyncPaymentFailed = async (event: Stripe.Event) => {
       { upsert: true, new: true },
     );
 
+    if (!transaction) {
+      console.error(
+        `[Stripe Webhook Error] No transaction for session ${session.id}`,
+      );
+      return;
+    }
+
     console.log(
       `[Stripe Webhook Failure][${event.type}] Transaction ${transaction._id} marked as FAILED.`,
     );
 
-    // 3. Reverse Fulfillment Logic (Release the held resource)
-    // todo: reverse fulfillment logic
+    // 3. Reverse the credit purchase. The row stays unpaid.
+    await StripeFulfillment.failCreditPurchase(
+      session,
+      TransactionStatus.Failed,
+    );
   } catch (error: any) {
     console.error(
-      `[Database Error] Failed to process payment failure for intent ${paymentIntentId}:`,
+      `[Database Error] Failed to process payment failure for session ${session.id}:`,
       error.message,
     );
     throw error;
@@ -181,29 +219,6 @@ const onAsyncPaymentFailed = async (event: Stripe.Event) => {
 const onCheckoutSessionExpired = async (event: Stripe.Event) => {
   const session = event.data.object as Stripe.Checkout.Session;
 
-  if (
-    session.metadata?.referenceType === TransactionReferenceType.CreditPurchase
-  ) {
-    await CreditPurchaseServices.failCreditPurchaseFromCheckout(
-      session,
-      TransactionStatus.Cancelled,
-    );
-    return;
-  }
-
-  const paymentIntentId = session.payment_intent as string;
-
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
-    expand: ['latest_charge.balance_transaction'],
-  });
-  const balanceTransaction = (paymentIntent.latest_charge as Stripe.Charge)
-    ?.balance_transaction as Stripe.BalanceTransaction;
-  const totalAmount = balanceTransaction.amount / 100;
-  const gatewayFee = balanceTransaction?.fee / 100 || 0;
-  const platformFeePercentage = 0;
-  const platformFee = (totalAmount * platformFeePercentage) / 100;
-  const netAmount = totalAmount - platformFee;
-
   // 1. Extract custom metadata
   const { userId, referenceType, referenceId } = session.metadata || {};
   if (!userId || !referenceType || !referenceId) {
@@ -213,12 +228,27 @@ const onCheckoutSessionExpired = async (event: Stripe.Event) => {
     return;
   }
 
+  const paymentIntentId = session.payment_intent as string;
+  const paymentIntent = await stripe.paymentIntents.retrieve(
+    paymentIntentId,
+    {
+      expand: ['latest_charge.balance_transaction'],
+    },
+  );
+  const balanceTransaction = (paymentIntent.latest_charge as Stripe.Charge)
+    ?.balance_transaction as Stripe.BalanceTransaction;
+  const totalAmount = balanceTransaction.amount / 100;
+  const gatewayFee = balanceTransaction?.fee / 100 || 0;
+  const platformFeePercentage = 0;
+  const platformFee = (totalAmount * platformFeePercentage) / 100;
+  const netAmount = totalAmount - platformFee;
+
   try {
-    // 2. Update or create the transaction document to mark it as Failed
+    // 2. Update or create the transaction document to mark it as Cancelled
     const transaction = await Transaction.findOneAndUpdate(
       {
         gateway: TransactionGateway.Stripe,
-        gatewayReferenceId: paymentIntentId,
+        gatewayReferenceId: session.id,
       },
       {
         $set: {
@@ -244,15 +274,25 @@ const onCheckoutSessionExpired = async (event: Stripe.Event) => {
       { upsert: true, new: true },
     );
 
+    if (!transaction) {
+      console.error(
+        `[Stripe Webhook Error] No transaction for session ${session.id}`,
+      );
+      return;
+    }
+
     console.log(
       `[Stripe Webhook Failure][${event.type}] Transaction ${transaction._id} marked as FAILED.`,
     );
 
-    // 3. Reverse Fulfillment Logic (Release the held resource)
-    // todo: reverse fulfillment logic
+    // 3. Reverse the credit purchase. The row stays unpaid.
+    await StripeFulfillment.failCreditPurchase(
+      session,
+      TransactionStatus.Cancelled,
+    );
   } catch (error: any) {
     console.error(
-      `[Database Error] Failed to process payment failure for intent ${paymentIntentId}:`,
+      `[Database Error] Failed to process payment failure for session ${session.id}:`,
       error.message,
     );
     throw error;

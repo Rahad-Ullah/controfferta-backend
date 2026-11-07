@@ -25,14 +25,14 @@ router.get(
 
 // get my transactions
 router.get(
-    '/my-transactions',
+    '/me',
     auth(UserRole.Client, UserRole.Provider),
     TransactionController.getMyTransactions,
 );
 
 // get all transactions
 router.get(
-    '/',
+    '/all',
     auth(UserRole.Admin, UserRole.SuperAdmin),
     TransactionController.getAllTransactions,
 );

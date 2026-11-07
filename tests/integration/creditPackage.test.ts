@@ -35,7 +35,7 @@ describe('Credit package API', () => {
         name: 'Starter',
         description: '100 credits',
         creditsAmount: 100,
-        price: 4900,
+        price: 49,
       });
     expect(noToken.status).toBe(401);
 
@@ -46,7 +46,7 @@ describe('Credit package API', () => {
         name: 'Starter',
         description: '100 credits',
         creditsAmount: 100,
-        price: 4900,
+        price: 49,
       });
     expect(forbidden.status).toBe(403);
 
@@ -57,7 +57,7 @@ describe('Credit package API', () => {
         name: 'Starter',
         description: '100 credits',
         creditsAmount: 100,
-        price: 10,
+        price: 0,
       });
     expect(cheap.status).toBe(400);
     expect(cheap.body.success).toBe(false);
@@ -69,7 +69,7 @@ describe('Credit package API', () => {
         name: 'Starter',
         description: '100 credits for one lead',
         creditsAmount: 100,
-        price: 4900,
+        price: 49,
         tag: 'popular',
       });
     expect(created.status).toBe(201);
@@ -91,14 +91,14 @@ describe('Credit package API', () => {
     );
     expect(catalog.status).toBe(200);
     expect(catalog.body.data).toHaveLength(1);
-    expect(catalog.body.data[0].price).toBe(4900);
+    expect(catalog.body.data[0].price).toBe(49);
 
     const repriced = await request(app)
       .patch(`/api/v1/credit-packages/${packageId}`)
       .set('Authorization', authHeader(adminToken))
-      .send({ price: 9900 });
+      .send({ price: 99 });
     expect(repriced.status).toBe(200);
-    expect(repriced.body.data.price).toBe(9900);
+    expect(repriced.body.data.price).toBe(99);
     expect(repriced.body.data.stripePriceId).toBe('price_test_mock2');
     expect(harness().stripeMock.prices.update).toHaveBeenCalledWith(
       'price_test_mock1',

@@ -17,7 +17,7 @@ This file is the domain model. New modules follow it. A client submits a lead wi
 
 ## Money and credits
 
-- `CreditPackage.price`, `CreditPurchase.pricing`, and `Transaction.amount` are integer euro cents. The default currency is `EUR`.
+- `CreditPackage.price`, `CreditPurchase.pricing`, and `Transaction.amount` are euros. The default currency is `EUR`. Stripe is charged in cents: the package price is multiplied by 100 when the Price is created, and the webhook divides Stripe amounts by 100 before saving them.
 - `Provider.creditBalance` and `CreditLedger.amount` are integer credits. A positive ledger amount adds credits. A negative amount spends them.
 - The feed shows the current `Category.creditCost`. `LeadAccess.creditCost` stores the credits actually taken at unlock.
 - `budgetRange` is the client's estimate in euros, stored as entered.
@@ -198,7 +198,7 @@ Where `reference.id` is set, the pair `(reference.type, reference.id, type)` is 
 | `name` | string | |
 | `description` | string | |
 | `creditsAmount` | integer | Credits granted on a paid purchase |
-| `price` | integer | Euro cents |
+| `price` | integer | Euros. Stripe receives this value times 100. |
 | `tag` | enum | Optional. `popular`, `recommended` |
 | `stripeProductId` | string | |
 | `stripePriceId` | string | |
@@ -217,9 +217,9 @@ Where `reference.id` is set, the pair `(reference.type, reference.id, type)` is 
 | `provider` | ObjectId | FK to `Provider`. The company that buys the credits. |
 | `package` | ObjectId | FK to `CreditPackage` |
 | `creditsAmount` | integer | Snapshot from the package |
-| `pricing.subtotal` | integer | Euro cents |
-| `pricing.discount` | integer | Euro cents |
-| `pricing.total` | integer | Euro cents |
+| `pricing.subtotal` | integer | Euros |
+| `pricing.discount` | integer | Euros |
+| `pricing.total` | integer | Euros |
 | `pricing.currency` | string | `EUR` |
 | `paymentStatus` | enum | `unpaid`, `paid`, `refunded` |
 | `transaction` | ObjectId | FK to `Transaction` |
@@ -239,8 +239,8 @@ Where `reference.id` is set, the pair `(reference.type, reference.id, type)` is 
 | `reference.type` | enum | `credit_purchase` |
 | `reference.id` | ObjectId | FK to `CreditPurchase` |
 | `type` | enum | `payment`, `refund` |
-| `amount` | integer | Euro cents |
-| `gatewayFee` | integer | Euro cents |
+| `amount` | number | Euros |
+| `gatewayFee` | number | Euros |
 | `currency` | string | `EUR` |
 | `paymentMethod` | string | `card`, `klarna`, `ideal`, and other Stripe methods |
 | `gateway` | enum | `stripe`, `paypal`, `manual` |

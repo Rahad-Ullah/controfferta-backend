@@ -21,7 +21,6 @@ import {
 } from '../transaction/transaction.constants';
 import { Transaction } from '../transaction/transaction.model';
 import { UserRole } from '../user/user.constant';
-import { CreditPaymentStatus } from './creditPurchase.constant';
 import { CreditPurchase } from './creditPurchase.model';
 
 const purchaseFields = 'name creditsAmount price status';
@@ -37,41 +36,6 @@ const findProvider = async (userId: string) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Provider profile not found');
   }
   return provider;
-};
-
-const paymentIntentIdOf = (session: Stripe.Checkout.Session) => {
-  if (typeof session.payment_intent === 'string') return session.payment_intent;
-  return session.payment_intent?.id;
-};
-
-// fee stays in euro cents, the same unit as the purchase total
-const readStripeFee = async (paymentIntentId?: string) => {
-  if (!paymentIntentId) return { gatewayFee: 0, paymentMethod: undefined };
-
-  try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(
-      paymentIntentId,
-      {
-        expand: ['latest_charge.balance_transaction'],
-      },
-    );
-    const charge = paymentIntent.latest_charge;
-    if (!charge || typeof charge === 'string') {
-      return { gatewayFee: 0, paymentMethod: undefined };
-    }
-
-    const balance = charge.balance_transaction;
-    const gatewayFee =
-      balance && typeof balance !== 'string' ? balance.fee || 0 : 0;
-    const paymentMethod = charge.payment_method_details?.type;
-
-    return { gatewayFee, paymentMethod };
-  } catch (error) {
-    const detail =
-      error instanceof Error ? error.message : 'unknown stripe error';
-    errorLogger.error(`Could not read the Stripe fee: ${detail}`);
-    return { gatewayFee: 0, paymentMethod: undefined };
-  }
 };
 
 // ---------------- create credit purchase ----------------
@@ -186,72 +150,6 @@ const createCreditPurchaseService = async (
   }
 };
 
-// ---------------- mark a paid checkout ----------------
-const completeCreditPurchaseFromCheckout = async (
-  checkout: Stripe.Checkout.Session,
-) => {
-  // an async method sends completed while the payment is still unpaid
-  if (checkout.payment_status !== 'paid') return;
-
-  const purchaseId = checkout.metadata?.referenceId;
-  if (!purchaseId) return;
-
-  const purchase = await CreditPurchase.findOne({
-    _id: purchaseId,
-    isDeleted: false,
-  });
-  if (!purchase || purchase.paymentStatus !== CreditPaymentStatus.Unpaid)
-    return;
-
-  const paymentIntentId = paymentIntentIdOf(checkout);
-  const { gatewayFee, paymentMethod } = await readStripeFee(paymentIntentId);
-
-  if (purchase.transaction) {
-    await Transaction.findByIdAndUpdate(purchase.transaction, {
-      status: TransactionStatus.Completed,
-      isPaid: true,
-      paidAt: new Date(),
-      gatewayFee,
-      currency: CREDIT_CURRENCY,
-      ...(paymentIntentId && { gatewayReferenceId: paymentIntentId }),
-      ...(paymentMethod && { paymentMethod }),
-    });
-  }
-
-  const paid = await CreditPurchase.findOneAndUpdate(
-    { _id: purchase._id, paymentStatus: CreditPaymentStatus.Unpaid },
-    { paymentStatus: CreditPaymentStatus.Paid },
-    { new: true },
-  );
-  if (!paid) return;
-
-  await CreditPackage.updateOne(
-    { _id: paid.package },
-    { $inc: { purchaseCount: 1 } },
-  );
-
-  // the credit ledger posts the credits; the balance stays unchanged until then
-};
-
-// ---------------- mark a failed or expired checkout ----------------
-const failCreditPurchaseFromCheckout = async (
-  checkout: Stripe.Checkout.Session,
-  status: TransactionStatus.Failed | TransactionStatus.Cancelled,
-) => {
-  const purchaseId = checkout.metadata?.referenceId;
-  if (!purchaseId) return;
-
-  const purchase = await CreditPurchase.findById(purchaseId);
-  if (!purchase || purchase.paymentStatus !== CreditPaymentStatus.Unpaid)
-    return;
-  if (!purchase.transaction) return;
-
-  await Transaction.updateOne(
-    { _id: purchase.transaction, status: TransactionStatus.Pending },
-    { status, isPaid: false },
-  );
-};
-
 // ---------------- get credit purchase by id ----------------
 const getCreditPurchaseByIdService = async (id: string, user: JwtPayload) => {
   const purchase = await CreditPurchase.findOne({ _id: id, isDeleted: false })
@@ -272,6 +170,7 @@ const getCreditPurchaseByIdService = async (id: string, user: JwtPayload) => {
   return purchase;
 };
 
+// list purchases
 const listPurchases = async (
   filter: Record<string, unknown>,
   query: Record<string, unknown>,
@@ -309,8 +208,6 @@ const getAllCreditPurchasesService = async (query: Record<string, unknown>) =>
 
 export const CreditPurchaseServices = {
   createCreditPurchaseService,
-  completeCreditPurchaseFromCheckout,
-  failCreditPurchaseFromCheckout,
   getCreditPurchaseByIdService,
   getMyCreditPurchasesService,
   getAllCreditPurchasesService,
