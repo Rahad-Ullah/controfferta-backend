@@ -15,12 +15,12 @@ class QueryBuilder<T> {
       this.modelQuery = this.modelQuery.find({
         $or: searchableFields.map(
           field =>
-            ({
-              [field]: {
-                $regex: this.query.searchTerm,
-                $options: 'i',
-              },
-            } as FilterQuery<T>)
+          ({
+            [field]: {
+              $regex: this.query.searchTerm,
+              $options: 'i',
+            },
+          } as FilterQuery<T>)
         ),
       });
     }
@@ -82,7 +82,7 @@ class QueryBuilder<T> {
     const total = await this.modelQuery.model.countDocuments(
       this.modelQuery.getFilter()
     );
-    const limit = Number(this?.query?.limit) || 10;
+    const limit = Number(this?.query?.limit) || 12;
     const page = Number(this?.query?.page) || 1;
     const totalPage = Math.ceil(total / limit);
 
