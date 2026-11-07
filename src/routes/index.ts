@@ -13,6 +13,8 @@ import { supportRoutes } from '../app/modules/support/support.route';
 import { faqRoutes } from '../app/modules/faq/faq.route';
 import { categoryRoutes } from '../app/modules/category/category.route';
 import { leadRoutes } from '../app/modules/lead/lead.route';
+import { creditPackageRoutes } from '../app/modules/creditPackage/creditPackage.route';
+import { creditPurchaseRoutes } from '../app/modules/creditPurchase/creditPurchase.route';
 import { mediaUploadRoutes } from '../app/modules/mediaUpload/mediaUpload.route';
 const router = express.Router();
 
@@ -68,6 +70,14 @@ const apiRoutes: { path: string; route: any }[] = [
   {
     path: '/leads',
     route: leadRoutes,
+  },
+  {
+    path: '/credit-packages',
+    route: creditPackageRoutes,
+  },
+  {
+    path: '/credit-purchases',
+    route: creditPurchaseRoutes,
   },
   {
     path: '/disclaimers',

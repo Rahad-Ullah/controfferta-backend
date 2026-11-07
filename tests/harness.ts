@@ -1,23 +1,36 @@
 export type TestHarness = {
-  sendMailSpy: ReturnType<typeof import('vitest')['vi']['fn']>;
-  queueAddSpy: ReturnType<typeof import('vitest')['vi']['fn']>;
+  sendMailSpy: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+  queueAddSpy: ReturnType<(typeof import('vitest'))['vi']['fn']>;
   workerProcessors: Array<(job: any) => Promise<any>>;
-  putObjectSpy: ReturnType<typeof import('vitest')['vi']['fn']>;
-  deleteObjectSpy: ReturnType<typeof import('vitest')['vi']['fn']>;
-  s3SendSpy: ReturnType<typeof import('vitest')['vi']['fn']>;
+  putObjectSpy: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+  deleteObjectSpy: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+  s3SendSpy: ReturnType<(typeof import('vitest'))['vi']['fn']>;
   redisMock: {
-    pipeline: ReturnType<typeof import('vitest')['vi']['fn']>;
-    zrangebyscore: ReturnType<typeof import('vitest')['vi']['fn']>;
-    zrem: ReturnType<typeof import('vitest')['vi']['fn']>;
+    pipeline: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+    zrangebyscore: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+    zrem: ReturnType<(typeof import('vitest'))['vi']['fn']>;
   };
   stripeMock: {
-    accounts: { create: ReturnType<typeof import('vitest')['vi']['fn']> };
-    transfers: { create: ReturnType<typeof import('vitest')['vi']['fn']> };
+    accounts: { create: ReturnType<(typeof import('vitest'))['vi']['fn']> };
+    transfers: { create: ReturnType<(typeof import('vitest'))['vi']['fn']> };
+    checkout: {
+      sessions: {
+        create: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+      };
+    };
+    products: {
+      create: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+      update: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+    };
+    prices: {
+      create: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+      update: ReturnType<(typeof import('vitest'))['vi']['fn']>;
+    };
     paymentIntents: {
-      retrieve: ReturnType<typeof import('vitest')['vi']['fn']>;
+      retrieve: ReturnType<(typeof import('vitest'))['vi']['fn']>;
     };
     webhooks: {
-      constructEvent: ReturnType<typeof import('vitest')['vi']['fn']>;
+      constructEvent: ReturnType<(typeof import('vitest'))['vi']['fn']>;
     };
   };
 };

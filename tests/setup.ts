@@ -78,6 +78,22 @@ const state = vi.hoisted(() => {
         }),
       },
     },
+    products: {
+      create: vi.fn(function create() {
+        return Promise.resolve({ id: 'prod_test_mock123' });
+      }),
+      update: vi.fn(function update() {
+        return Promise.resolve({ id: 'prod_test_mock123', active: true });
+      }),
+    },
+    prices: {
+      create: vi.fn(function create() {
+        return Promise.resolve({ id: 'price_test_mock123' });
+      }),
+      update: vi.fn(function update() {
+        return Promise.resolve({ id: 'price_test_mock123', active: false });
+      }),
+    },
     paymentIntents: {
       retrieve: vi.fn(function retrieve() {
         return Promise.resolve({

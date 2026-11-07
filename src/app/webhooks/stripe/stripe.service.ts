@@ -12,6 +12,7 @@ import {
   SupportedCurrency,
 } from '../../modules/wallet/wallet.constants';
 import { Wallet } from '../../modules/wallet/wallet.model';
+import { CreditPurchaseServices } from '../../modules/creditPurchase/creditPurchase.service';
 
 // ----------------- on checkout session completed -----------------
 const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
@@ -19,6 +20,13 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
 
   // 1. Extract custom metadata
   const { userId, referenceType, referenceId } = session.metadata || {};
+
+  // credit purchases keep the amount in euro cents and mark the purchase paid
+  if (referenceType === TransactionReferenceType.CreditPurchase) {
+    await CreditPurchaseServices.completeCreditPurchaseFromCheckout(session);
+    return;
+  }
+
   if (!userId || !referenceType || !referenceId) {
     console.error(
       `[Stripe Webhook Error] Missing crucial metadata for session: ${session.id}`,
@@ -91,6 +99,17 @@ const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
 // ----------------- on async payment failed -----------------
 const onAsyncPaymentFailed = async (event: Stripe.Event) => {
   const session = event.data.object as Stripe.Checkout.Session;
+
+  if (
+    session.metadata?.referenceType === TransactionReferenceType.CreditPurchase
+  ) {
+    await CreditPurchaseServices.failCreditPurchaseFromCheckout(
+      session,
+      TransactionStatus.Failed,
+    );
+    return;
+  }
+
   const paymentIntentId = session.payment_intent as string;
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
     expand: ['latest_charge.balance_transaction'],
@@ -161,6 +180,17 @@ const onAsyncPaymentFailed = async (event: Stripe.Event) => {
 // ----------------- on checkout session expired -----------------
 const onCheckoutSessionExpired = async (event: Stripe.Event) => {
   const session = event.data.object as Stripe.Checkout.Session;
+
+  if (
+    session.metadata?.referenceType === TransactionReferenceType.CreditPurchase
+  ) {
+    await CreditPurchaseServices.failCreditPurchaseFromCheckout(
+      session,
+      TransactionStatus.Cancelled,
+    );
+    return;
+  }
+
   const paymentIntentId = session.payment_intent as string;
 
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, {
@@ -328,7 +358,6 @@ const onRefundFailed = async (event: Stripe.Event) => {
     );
 
     // 4. Optionally: Alert admin to intervene manually
-
   } catch (error: any) {
     console.error(
       `[Database Error] Failed to process refund failure for payment_intent ${paymentIntentId}:`,

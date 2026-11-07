@@ -1,23 +1,24 @@
 export enum TransactionReferenceType {
-    Order = 'Order',
-    Wallet = 'Wallet',
+  Order = 'Order',
+  Wallet = 'Wallet',
+  CreditPurchase = 'credit_purchase',
 }
 
 export enum TransactionGateway {
-    Stripe = 'stripe',
-    Paypal = 'paypal',
-    Manual = 'manual',
+  Stripe = 'stripe',
+  Paypal = 'paypal',
+  Manual = 'manual',
 }
 
 export enum TransactionType {
-    Payment = 'payment',
-    Refund = 'refund',
-    Payout = 'payout',
+  Payment = 'payment',
+  Refund = 'refund',
+  Payout = 'payout',
 }
 
 export enum TransactionStatus {
-    Pending = 'pending',
-    Completed = 'completed',
-    Failed = 'failed',
-    Cancelled = 'cancelled',
+  Pending = 'pending',
+  Completed = 'completed',
+  Failed = 'failed',
+  Cancelled = 'cancelled',
 }
