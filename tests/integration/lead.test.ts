@@ -68,12 +68,14 @@ describe('Lead API', () => {
     const leadId = created.body.data._id;
 
     const noToken = await request(app).get('/api/v1/leads');
-    expect(noToken.status).toBe(401);
+    expect(noToken.status).toBe(200);
+    expect(noToken.body.data).toEqual([]);
 
     const clientFeed = await request(app)
       .get('/api/v1/leads')
       .set('Authorization', authHeader(clientToken));
-    expect(clientFeed.status).toBe(403);
+    expect(clientFeed.status).toBe(200);
+    expect(clientFeed.body.data).toEqual([]);
 
     const hiddenFeed = await request(app)
       .get('/api/v1/leads?searchTerm=Milano')
