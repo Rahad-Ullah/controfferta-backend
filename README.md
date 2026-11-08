@@ -6,7 +6,7 @@ A **client** asks for a counter-offer. A **provider** is a partner company. Staf
 
 ## Stack
 
-- TypeScript, Node.js, Express
+- TypeScript, Node.js, Express.js
 - MongoDB and Mongoose
 - Zod validation and OpenAPI (Swagger UI)
 - JWT and bcrypt
