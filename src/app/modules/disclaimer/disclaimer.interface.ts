@@ -1,8 +1,8 @@
-import { Model, ObjectId } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { DisclaimerType } from './disclaimer.constants';
 
 export interface IDisclaimer {
-  _id: ObjectId;
+  _id: Types.ObjectId;
   type: DisclaimerType;
   content: string;
   createdAt: Date;

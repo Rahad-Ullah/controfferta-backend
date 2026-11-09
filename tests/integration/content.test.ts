@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import app from '../../src/app';
 import { DisclaimerType } from '../../src/app/modules/disclaimer/disclaimer.constants';
+import { Disclaimer } from '../../src/app/modules/disclaimer/disclaimer.model';
 import { UserRole } from '../../src/app/modules/user/user.constant';
 import { authHeader } from '../helpers/auth.helper';
 import { createTestUser } from '../helpers/user.helper';
@@ -39,6 +40,28 @@ describe('FAQ, disclaimer, and settings', () => {
     expect(one.status).toBe(200);
     expect(one.body.data.question).toBe('What is Controfferta?');
 
+    const missing = await request(app).get(
+      `/api/v1/disclaimers/${DisclaimerType.TermsOfService}`,
+    );
+    expect(missing.status).toBe(404);
+    expect(missing.body.message).toBe('Disclaimer not found');
+
+    const userDisclaimer = await request(app)
+      .post('/api/v1/disclaimers')
+      .set('Authorization', authHeader(userToken))
+      .send({
+        type: DisclaimerType.PrivacyPolicy,
+        content: 'We store account data.',
+      });
+    expect(userDisclaimer.status).toBe(403);
+
+    const unknownType = await request(app)
+      .post('/api/v1/disclaimers')
+      .set('Authorization', authHeader(adminToken))
+      .send({ type: 'about_us', content: 'About the site.' });
+    expect(unknownType.status).toBe(400);
+    expect(unknownType.body.success).toBe(false);
+
     const disclaimer = await request(app)
       .post('/api/v1/disclaimers')
       .set('Authorization', authHeader(adminToken))
@@ -47,12 +70,30 @@ describe('FAQ, disclaimer, and settings', () => {
         content: 'We store account data.',
       });
     expect(disclaimer.status).toBe(200);
+    expect(disclaimer.body.message).toBe('Disclaimer updated successfully');
 
     const publicDisclaimer = await request(app).get(
       `/api/v1/disclaimers/${DisclaimerType.PrivacyPolicy}`,
     );
     expect(publicDisclaimer.status).toBe(200);
+    expect(publicDisclaimer.body.message).toBe(
+      'Disclaimer fetched successfully',
+    );
     expect(publicDisclaimer.body.data.content).toBe('We store account data.');
+
+    const updated = await request(app)
+      .post('/api/v1/disclaimers')
+      .set('Authorization', authHeader(adminToken))
+      .send({
+        type: DisclaimerType.PrivacyPolicy,
+        content: 'We store account data for credits.',
+      });
+    expect(updated.status).toBe(200);
+    expect(updated.body.data._id).toBe(disclaimer.body.data._id);
+    expect(updated.body.data.content).toBe(
+      'We store account data for credits.',
+    );
+    expect(await Disclaimer.countDocuments()).toBe(1);
 
     const settings = await request(app).get('/api/v1/settings');
     expect(settings.status).toBe(200);

@@ -13,6 +13,7 @@ import { registerPlatformReviewDocs } from '../app/modules/platformReview/platfo
 import { registerBlogDocs } from '../app/modules/blog/blog.doc';
 import { registerSettingDocs } from '../app/modules/setting/setting.doc';
 import { registerSupportDocs } from '../app/modules/support/support.doc';
+import { registerDisclaimerDocs } from '../app/modules/disclaimer/disclaimer.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -35,6 +36,7 @@ export function generateOpenApiDocumentV1() {
   registerBlogDocs();
   registerSettingDocs();
   registerSupportDocs();
+  registerDisclaimerDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
   registerCreditLedgerDocs();
