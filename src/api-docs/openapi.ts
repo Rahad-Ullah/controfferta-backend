@@ -6,6 +6,7 @@ import { registerAuthDocs } from '../app/modules/auth/auth.doc';
 import { registerCategoryDocs } from '../app/modules/category/category.doc';
 import { registerCreditPackageDocs } from '../app/modules/creditPackage/creditPackage.doc';
 import { registerCreditPurchaseDocs } from '../app/modules/creditPurchase/creditPurchase.doc';
+import { registerCreditLedgerDocs } from '../app/modules/creditLedger/creditLedger.doc';
 import { registerLeadDocs } from '../app/modules/lead/lead.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
@@ -26,6 +27,7 @@ export function generateOpenApiDocumentV1() {
   registerLeadDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
+  registerCreditLedgerDocs();
 
   const generator = new OpenApiGeneratorV3(registry.definitions);
 

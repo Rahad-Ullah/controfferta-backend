@@ -1,4 +1,12 @@
+import { StatusCodes } from 'http-status-codes';
+import mongoose from 'mongoose';
 import type { Stripe } from 'stripe/types';
+import ApiError from '../../../errors/ApiError';
+import {
+  CreditLedgerReferenceType,
+  CreditLedgerType,
+} from '../../modules/creditLedger/creditLedger.constant';
+import { CreditLedgerServices } from '../../modules/creditLedger/creditLedger.service';
 import { CREDIT_CURRENCY } from '../../modules/creditPackage/creditPackage.constant';
 import { CreditPackage } from '../../modules/creditPackage/creditPackage.model';
 import { CreditPaymentStatus } from '../../modules/creditPurchase/creditPurchase.constant';
@@ -15,34 +23,68 @@ type StripeFee = {
 // ---------------- fulfill credit purchase ----------------
 // fee is the Stripe balance-transaction fee, already in euros
 const fulfillCreditPurchase = async (purchaseId: string, fee: StripeFee) => {
-  const purchase = await CreditPurchase.findOneAndUpdate(
-    {
-      _id: purchaseId,
-      paymentStatus: CreditPaymentStatus.Unpaid,
-    },
-    {
-      paymentStatus: CreditPaymentStatus.Paid,
-    },
-    { new: true },
-  );
-  if (!purchase?.transaction) return;
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
 
-  await Transaction.findByIdAndUpdate(purchase.transaction, {
-    status: TransactionStatus.Completed,
-    isPaid: true,
-    paidAt: new Date(),
-    gatewayFee: fee.gatewayFee,
-    currency: CREDIT_CURRENCY,
-    gatewayReferenceId: fee.paymentIntentId,
-    paymentMethod: fee.paymentMethod,
-  });
+    const purchase = await CreditPurchase.findOneAndUpdate(
+      {
+        _id: purchaseId,
+        paymentStatus: CreditPaymentStatus.Unpaid,
+      },
+      { paymentStatus: CreditPaymentStatus.Paid },
+      { new: true, session },
+    );
+    if (!purchase?.transaction) {
+      await session.abortTransaction();
+      return;
+    }
 
-  await CreditPackage.updateOne(
-    { _id: purchase.package },
-    { $inc: { purchaseCount: 1 } },
-  );
+    await Transaction.findByIdAndUpdate(
+      purchase.transaction,
+      {
+        status: TransactionStatus.Completed,
+        isPaid: true,
+        paidAt: new Date(),
+        gatewayFee: fee.gatewayFee,
+        currency: CREDIT_CURRENCY,
+        gatewayReferenceId: fee.paymentIntentId,
+        paymentMethod: fee.paymentMethod,
+      },
+      { session },
+    );
 
-  // todo: the credit ledger posts the credits; the balance stays unchanged until then
+    await CreditPackage.updateOne(
+      { _id: purchase.package },
+      { $inc: { purchaseCount: 1 } },
+      { session },
+    );
+
+    // the paid purchase and the credit grant commit together
+    await CreditLedgerServices.postCreditLedger({
+      providerId: purchase.provider.toString(),
+      type: CreditLedgerType.Purchase,
+      amount: purchase.creditsAmount,
+      reference: {
+        type: CreditLedgerReferenceType.CreditPurchase,
+        id: purchase._id.toString(),
+      },
+      session,
+    });
+
+    await session.commitTransaction();
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    if (
+      error instanceof ApiError &&
+      error.statusCode === StatusCodes.CONFLICT
+    ) {
+      return;
+    }
+    throw error;
+  } finally {
+    session.endSession();
+  }
 };
 
 // ---------------- fail credit purchase ----------------

@@ -15,6 +15,7 @@ import { categoryRoutes } from '../app/modules/category/category.route';
 import { leadRoutes } from '../app/modules/lead/lead.route';
 import { creditPackageRoutes } from '../app/modules/creditPackage/creditPackage.route';
 import { creditPurchaseRoutes } from '../app/modules/creditPurchase/creditPurchase.route';
+import { creditLedgerRoutes } from '../app/modules/creditLedger/creditLedger.route';
 import { mediaUploadRoutes } from '../app/modules/mediaUpload/mediaUpload.route';
 const router = express.Router();
 
@@ -78,6 +79,10 @@ const apiRoutes: { path: string; route: any }[] = [
   {
     path: '/credit-purchases',
     route: creditPurchaseRoutes,
+  },
+  {
+    path: '/credit-ledgers',
+    route: creditLedgerRoutes,
   },
   {
     path: '/disclaimers',

@@ -14,6 +14,7 @@ import { sendNotifications } from '../../../helpers/notificationHelper';
 import { NotificationType } from '../notification/notification.constant';
 import { MediaUploadServices } from '../mediaUpload/mediaUpload.service';
 import { Provider } from '../provider/provider.model';
+import { CreditLedgerServices } from '../creditLedger/creditLedger.service';
 import { errorLogger } from '../../../shared/logger';
 
 const createUserToDB = async (payload: IRegisterUser) => {
@@ -70,6 +71,11 @@ const createUserToDB = async (payload: IRegisterUser) => {
         { _id: createdUser._id },
         { $set: { roleRef: provider._id } },
         { session },
+      );
+
+      await CreditLedgerServices.grantWelcomeCredits(
+        provider._id.toString(),
+        session,
       );
     }
 

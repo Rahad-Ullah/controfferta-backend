@@ -95,6 +95,11 @@ const settingSchema = new Schema<ISetting, SettingModel>({
       default: '',
     },
   },
+  welcomeCreditAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
 });
 
 export const Setting = model<ISetting, SettingModel>(

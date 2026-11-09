@@ -34,6 +34,7 @@ export interface ISetting {
     discord: string;
     telegram: string;
   };
+  welcomeCreditAmount: number;
 }
 
 export type SettingModel = Model<ISetting>;

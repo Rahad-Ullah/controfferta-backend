@@ -1,6 +1,11 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import app from '../../src/app';
+import {
+  CreditLedgerReferenceType,
+  CreditLedgerType,
+} from '../../src/app/modules/creditLedger/creditLedger.constant';
+import { CreditLedger } from '../../src/app/modules/creditLedger/creditLedger.model';
 import { CreditPackageStatus } from '../../src/app/modules/creditPackage/creditPackage.constant';
 import { CreditPaymentStatus } from '../../src/app/modules/creditPurchase/creditPurchase.constant';
 import { Provider } from '../../src/app/modules/provider/provider.model';
@@ -244,7 +249,15 @@ describe('Credit purchase API', () => {
     expect(sold.body.data.purchaseCount).toBe(1);
 
     const balance = await Provider.findById(provider._id);
-    expect(balance?.creditBalance).toBe(0);
+    expect(balance?.creditBalance).toBe(100);
+    const ledger = await CreditLedger.find({ provider: provider._id });
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].type).toBe(CreditLedgerType.Purchase);
+    expect(ledger[0].amount).toBe(100);
+    expect(ledger[0].balanceAfter).toBe(100);
+    expect(ledger[0].reference?.type).toBe(
+      CreditLedgerReferenceType.CreditPurchase,
+    );
 
     const second = await request(app)
       .post('/api/v1/credit-purchases/create')
@@ -276,5 +289,10 @@ describe('Credit purchase API', () => {
       `/api/v1/credit-packages/${packageId}`,
     );
     expect(stillOne.body.data.purchaseCount).toBe(1);
+    expect(await CreditLedger.countDocuments({ provider: provider._id })).toBe(
+      1,
+    );
+    const afterExpiry = await Provider.findById(provider._id);
+    expect(afterExpiry?.creditBalance).toBe(100);
   });
 });
