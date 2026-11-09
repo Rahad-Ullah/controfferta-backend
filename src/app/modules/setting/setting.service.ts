@@ -1,21 +1,38 @@
-import { ISetting } from './setting.interface';
 import { Setting } from './setting.model';
 
-// ------------ create/update setting ------------------
-const createOrUpdateSetting = async (payload: ISetting): Promise<ISetting | null> => {
-  const result = await Setting.findOneAndUpdate(
+// a nested object becomes dotted paths so one field does not replace its siblings
+const flatten = (value: unknown, prefix = ''): Record<string, unknown> => {
+  if (value === undefined) return {};
+  if (Array.isArray(value) || value === null || typeof value !== 'object') {
+    return prefix ? { [prefix]: value } : {};
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce(
+    (fields, [key, child]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return { ...fields, ...flatten(child, path) };
+    },
     {},
-    payload,
-    { upsert: true, new: true }
   );
-  return result;
 };
 
-// ------------ get setting ------------------
-const getSetting = async (): Promise<ISetting | null> => {
-  const result = await Setting.findOne();
-  return result;
+// ---------------- create or update setting ----------------
+// one document for the site; a partial update keeps the fields that were not sent
+const createOrUpdateSetting = async (payload: Record<string, unknown>) => {
+  const $set = flatten(payload);
+  if (!Object.keys($set).length) {
+    return Setting.findOne();
+  }
+
+  return Setting.findOneAndUpdate(
+    {},
+    { $set },
+    { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true },
+  );
 };
+
+// ---------------- get setting ----------------
+const getSetting = async () => Setting.findOne();
 
 export const SettingServices = {
   createOrUpdateSetting,

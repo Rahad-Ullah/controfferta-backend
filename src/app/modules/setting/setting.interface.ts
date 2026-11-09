@@ -1,40 +1,41 @@
-import { Model, ObjectId } from 'mongoose';
+import { Model, Types } from 'mongoose';
 
-export interface ISetting {
-  _id: ObjectId;
+export type ISettingAddress = {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+};
+
+export type ISettingSocialLinks = {
+  facebook: string;
+  instagram: string;
+  twitter: string;
+  linkedin: string;
+  youtube: string;
+  tiktok: string;
+  reddit: string;
+  weChat: string;
+  discord: string;
+  telegram: string;
+};
+
+export type ISetting = {
+  _id: Types.ObjectId;
+  welcomeCreditAmount: number;
   contactInfo: {
     email: string;
-    phone: {
-      countryCode: string;
-      number: string;
-    };
-    whatsApp: {
-      countryCode: string;
-      number: string;
-    };
-    address: string;
+    phone: string;
+    whatsApp: string;
+    address: ISettingAddress;
     location: {
-      type: string;
+      type: 'Point';
       coordinates: [number, number];
     };
   };
-  mobileAppLink: {
-    googlePlay: string;
-    appleStore: string;
-  }
-  socialLink: {
-    facebook: string;
-    instagram: string;
-    twitter: string;
-    linkedin: string;
-    youtube: string;
-    tiktok: string;
-    reddit: string;
-    weChat: string;
-    discord: string;
-    telegram: string;
-  };
-  welcomeCreditAmount: number;
-}
+  socialLinks: ISettingSocialLinks;
+};
 
 export type SettingModel = Model<ISetting>;

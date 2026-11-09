@@ -61,10 +61,32 @@ describe('FAQ, disclaimer, and settings', () => {
       .post('/api/v1/settings')
       .set('Authorization', authHeader(adminToken))
       .send({
-        contactInfo: { email: 'hello@example.com' },
+        welcomeCreditAmount: 20,
+        contactInfo: {
+          email: 'hello@example.com',
+          phone: '+390212345678',
+          address: { line1: 'Via Roma 1', city: 'Milano' },
+          location: { coordinates: [9.19, 45.46] },
+        },
+        socialLinks: { facebook: 'https://facebook.com/controfferta' },
       });
     expect(saved.status).toBe(200);
+    expect(saved.body.message).toBe('Setting updated successfully');
+    expect(saved.body.data.welcomeCreditAmount).toBe(20);
     expect(saved.body.data.contactInfo.email).toBe('hello@example.com');
+    expect(saved.body.data.contactInfo.address.city).toBe('Milano');
+    expect(saved.body.data.contactInfo.location.type).toBe('Point');
+    expect(saved.body.data.socialLinks.facebook).toBe(
+      'https://facebook.com/controfferta',
+    );
+
+    const creditsOnly = await request(app)
+      .post('/api/v1/settings')
+      .set('Authorization', authHeader(adminToken))
+      .send({ welcomeCreditAmount: 15 });
+    expect(creditsOnly.status).toBe(200);
+    expect(creditsOnly.body.data.welcomeCreditAmount).toBe(15);
+    expect(creditsOnly.body.data.contactInfo.email).toBe('hello@example.com');
 
     const userSettings = await request(app)
       .post('/api/v1/settings')
