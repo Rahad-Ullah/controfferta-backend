@@ -7,6 +7,7 @@ import { registerCategoryDocs } from '../app/modules/category/category.doc';
 import { registerCreditPackageDocs } from '../app/modules/creditPackage/creditPackage.doc';
 import { registerCreditPurchaseDocs } from '../app/modules/creditPurchase/creditPurchase.doc';
 import { registerCreditLedgerDocs } from '../app/modules/creditLedger/creditLedger.doc';
+import { registerTransactionDocs } from '../app/modules/transaction/transaction.doc';
 import { registerLeadDocs } from '../app/modules/lead/lead.doc';
 import { registerLeadAccessDocs } from '../app/modules/leadAccess/leadAccess.doc';
 import { registerPlatformReviewDocs } from '../app/modules/platformReview/platformReview.doc';
@@ -14,6 +15,7 @@ import { registerBlogDocs } from '../app/modules/blog/blog.doc';
 import { registerSettingDocs } from '../app/modules/setting/setting.doc';
 import { registerSupportDocs } from '../app/modules/support/support.doc';
 import { registerDisclaimerDocs } from '../app/modules/disclaimer/disclaimer.doc';
+import { registerNotificationDocs } from '../app/modules/notification/notification.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -32,14 +34,16 @@ export function generateOpenApiDocumentV1() {
   registerCategoryDocs();
   registerLeadDocs();
   registerLeadAccessDocs();
-  registerPlatformReviewDocs();
-  registerBlogDocs();
-  registerSettingDocs();
-  registerSupportDocs();
-  registerDisclaimerDocs();
+  registerCreditLedgerDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
-  registerCreditLedgerDocs();
+  registerTransactionDocs();
+  registerPlatformReviewDocs();
+  registerNotificationDocs();
+  registerBlogDocs();
+  registerSettingDocs();
+  registerDisclaimerDocs();
+  registerSupportDocs();
 
   const generator = new OpenApiGeneratorV3(registry.definitions);
 

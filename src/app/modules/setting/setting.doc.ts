@@ -3,7 +3,7 @@ import { SettingValidations } from './setting.validation';
 
 export function registerSettingDocs() {
   const registerSetting = (opts: Parameters<typeof registerApiRoute>[0]) => {
-    registerApiRoute({ tags: ['Setting'], ...opts });
+    registerApiRoute({ tags: ['Platform Settings'], ...opts });
   };
 
   registerSetting({
