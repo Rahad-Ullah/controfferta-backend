@@ -8,6 +8,7 @@ import { registerCreditPackageDocs } from '../app/modules/creditPackage/creditPa
 import { registerCreditPurchaseDocs } from '../app/modules/creditPurchase/creditPurchase.doc';
 import { registerCreditLedgerDocs } from '../app/modules/creditLedger/creditLedger.doc';
 import { registerLeadDocs } from '../app/modules/lead/lead.doc';
+import { registerLeadAccessDocs } from '../app/modules/leadAccess/leadAccess.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -25,6 +26,7 @@ export function generateOpenApiDocumentV1() {
   registerUserDocs();
   registerCategoryDocs();
   registerLeadDocs();
+  registerLeadAccessDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
   registerCreditLedgerDocs();
