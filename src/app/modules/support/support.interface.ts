@@ -1,14 +1,16 @@
 import { Model, Types } from 'mongoose';
-import { SupportStatus, SupportType } from './support.constants';
+import { SupportPriority, SupportStatus } from './support.constants';
 
 export interface ISupport {
   _id: Types.ObjectId;
-  user: Types.ObjectId;
-  type: SupportType;
-  title: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  subject: string;
   message: string;
-  phone?: string;
   status: SupportStatus;
+  priority: SupportPriority;
+  isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

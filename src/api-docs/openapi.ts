@@ -12,6 +12,7 @@ import { registerLeadAccessDocs } from '../app/modules/leadAccess/leadAccess.doc
 import { registerPlatformReviewDocs } from '../app/modules/platformReview/platformReview.doc';
 import { registerBlogDocs } from '../app/modules/blog/blog.doc';
 import { registerSettingDocs } from '../app/modules/setting/setting.doc';
+import { registerSupportDocs } from '../app/modules/support/support.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -33,6 +34,7 @@ export function generateOpenApiDocumentV1() {
   registerPlatformReviewDocs();
   registerBlogDocs();
   registerSettingDocs();
+  registerSupportDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
   registerCreditLedgerDocs();

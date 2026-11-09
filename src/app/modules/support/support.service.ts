@@ -1,109 +1,90 @@
-
-import { Support } from './support.model';
-import { ISupport } from './support.interface';
-import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
-import { SupportStatus } from './support.constants';
 import QueryBuilder from '../../builder/QueryBuilder';
+import ApiError from '../../../errors/ApiError';
+import { SupportPriority, SupportStatus } from './support.constants';
+import { Support } from './support.model';
 
-
-// ----------------- create support -----------------
-const createSupport = async (payload: Partial<ISupport>) => {
-  const MAX_TICKETS_24H = 3;
-
-  // 1. Calculate time threshold (24 hours ago from right now)
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-  // 2. Count tickets created in the last 24 hours for this user
-  const ticketCount = await Support.countDocuments({
-    user: payload.user,
-    type: payload.type,
-    status: SupportStatus.Open,
-    createdAt: { $gte: twentyFourHoursAgo },
-  });
-
-  // 3. Enforce the rate limit
-  if (ticketCount >= MAX_TICKETS_24H) {
-    throw new ApiError(
-      StatusCodes.TOO_MANY_REQUESTS,
-      `We are currently looking into your other queries. Please wait a while and try again.`
-    );
-  }
-
-  // 4. Create the ticket
-  const result = await Support.create(payload);
-  if (!result) {
-    throw new ApiError(
-      StatusCodes.INTERNAL_SERVER_ERROR,
-      "Failed to create support ticket. Please try again later."
-    );
-  }
-
-  return result;
+// ---------------- create support message ----------------
+const createSupportService = async (payload: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  subject: string;
+  message: string;
+}) => {
+  // anyone can write in; status and priority stay at the defaults
+  return Support.create(payload);
 };
 
-// ----------------- update support -----------------
-const updateSupport = async (id: string, payload: ISupport) => {
-  const result = await Support.findByIdAndUpdate(
-    id,
+// ---------------- update support message ----------------
+const updateSupportService = async (
+  id: string,
+  payload: { status?: SupportStatus; priority?: SupportPriority },
+) => {
+  const support = await Support.findOneAndUpdate(
+    { _id: id, isDeleted: false },
     payload,
-    { new: true }
+    { new: true, runValidators: true },
   );
-  if (!result) {
-    throw new ApiError(
-      StatusCodes.INTERNAL_SERVER_ERROR,
-      "Failed to update support. Please try again later."
-    );
+
+  if (!support) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Support message not found');
   }
-  return result;
+
+  return support;
 };
 
-// ----------------- get single by id ------------------
-const getSingleById = async (id: string) => {
-  const result = await Support.findById(id).populate('user', 'name email role username phone image')
-  return result
-}
+// ---------------- delete support message ----------------
+const deleteSupportService = async (id: string) => {
+  // soft delete so the inbox can drop a message without losing the row
+  const support = await Support.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    { isDeleted: true },
+    { new: true },
+  );
 
-// ---------------- get by user id ----------------
-const getByUserId = async (userId: string, query: Record<string, unknown>) => {
+  if (!support) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Support message not found');
+  }
+
+  return support;
+};
+
+// ---------------- get support message by id ----------------
+const getSupportByIdService = async (id: string) => {
+  const support = await Support.findOne({ _id: id, isDeleted: false });
+
+  if (!support) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Support message not found');
+  }
+
+  return support;
+};
+
+// ---------------- get support messages ----------------
+const getSupportsService = async (query: Record<string, unknown>) => {
   const supportQuery = new QueryBuilder(
-    Support.find({ user: userId }), query
+    Support.find({ isDeleted: false }),
+    query,
   )
-    .filter()
-    .search(['title'])
+    .search(['firstName', 'lastName', 'email', 'subject', 'message'])
+    .filter(['isDeleted'])
     .sort()
     .paginate()
-    .fields()
+    .fields();
 
   const [data, pagination] = await Promise.all([
-    supportQuery.modelQuery,
-    supportQuery.getPaginationInfo()
+    supportQuery.modelQuery.lean(),
+    supportQuery.getPaginationInfo(),
   ]);
-  return { data, pagination };
-}
 
-// ----------------- get all tickets ------------------
-const getAllSupports = async (query: Record<string, unknown>) => {
-  const supportQuery = new QueryBuilder(
-    Support.find(), query
-  )
-    .filter()
-    .search(['title'])
-    .sort()
-    .paginate()
-    .fields()
-
-  const [data, pagination] = await Promise.all([
-    supportQuery.modelQuery.populate('user', 'name email role username phone image'),
-    supportQuery.getPaginationInfo()
-  ]);
   return { data, pagination };
-}
+};
 
 export const SupportServices = {
-  createSupport,
-  updateSupport,
-  getSingleById,
-  getByUserId,
-  getAllSupports
+  createSupportService,
+  updateSupportService,
+  deleteSupportService,
+  getSupportByIdService,
+  getSupportsService,
 };

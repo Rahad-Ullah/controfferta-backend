@@ -42,7 +42,7 @@ Cover the mounted routers in `src/routes/index.ts`, plus the Stripe webhook moun
 | Wallet | `/api/v1/wallets` | A `user` can connect a Stripe payout method, read their wallet, and request a withdrawal. Stripe calls stay mocked. Currency is USD. |
 | Transactions | `/api/v1/transactions` | A user reads their own transactions. An admin updates status and lists all transactions. Reference types are `Order` and `Wallet`. |
 | Stripe webhook | `POST /webhooks/stripe` | Raw body and signature check. Handled events are listed in section 6. A repeated event id is ignored. |
-| Support | `/api/v1/supports` | A `user` creates and lists their tickets. An admin updates a ticket and lists all tickets. |
+| Support | `/api/v1/supports` | Anyone can send a contact message. An admin updates status and priority, lists messages, and soft-deletes one. |
 | FAQ, disclaimer, settings | `/api/v1/faqs`, `/api/v1/disclaimers`, `/api/v1/settings` | Public reads where the route allows them. Writes require `admin` or `super_admin`. |
 | Chat and messages | `/api/v1/chats`, `/api/v1/messages` | Authenticated create and list. A user only sees their own chats. |
 | Notifications | `/api/v1/notifications` | Authenticated list, mark one read, mark all read. |

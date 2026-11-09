@@ -1,48 +1,49 @@
 import express from 'express';
-import { SupportController } from './support.controller';
 import auth from '../../middlewares/auth';
-import { UserRole } from '../user/user.constant';
 import validateRequest from '../../middlewares/validateRequest';
+import { UserRole } from '../user/user.constant';
+import { SupportController } from './support.controller';
 import { SupportValidations } from './support.validation';
 
 const router = express.Router();
 
-// create support ticket
+// create support message
 router.post(
   '/create',
-  auth(UserRole.Client, UserRole.Provider),
-  validateRequest(SupportValidations.createSupportSchema),
-  SupportController.createSupport,
+  validateRequest(SupportValidations.createSupportValidation),
+  SupportController.createSupportController,
 );
 
-// update support ticket
+// update support message
 router.patch(
   '/:id',
   auth(UserRole.Admin, UserRole.SuperAdmin),
-  validateRequest(SupportValidations.updateSupportSchema),
-  SupportController.updateSupport
-)
-
-// get single support ticket
-router.get(
-  '/single/:id',
-  auth(UserRole.Client, UserRole.Provider, UserRole.Admin, UserRole.SuperAdmin),
-  validateRequest(SupportValidations.getSingleSupportSchema),
-  SupportController.getSingleById,
+  validateRequest(SupportValidations.updateSupportValidation),
+  SupportController.updateSupportController,
 );
 
-// get by user id
-router.get(
-  '/my-tickets',
-  auth(UserRole.Client, UserRole.Provider),
-  SupportController.getByUserId,
-);
-
-// get all support tickets
-router.get(
-  '/',
+// delete support message
+router.delete(
+  '/:id',
   auth(UserRole.Admin, UserRole.SuperAdmin),
-  SupportController.getAllSupports
-)
+  validateRequest(SupportValidations.supportIdValidation),
+  SupportController.deleteSupportController,
+);
+
+// get support messages
+router.get(
+  '/all',
+  auth(UserRole.Admin, UserRole.SuperAdmin),
+  validateRequest(SupportValidations.getSupportsValidation),
+  SupportController.getSupportsController,
+);
+
+// get support message by id
+router.get(
+  '/:id',
+  auth(UserRole.Admin, UserRole.SuperAdmin),
+  validateRequest(SupportValidations.supportIdValidation),
+  SupportController.getSupportByIdController,
+);
 
 export const supportRoutes = router;

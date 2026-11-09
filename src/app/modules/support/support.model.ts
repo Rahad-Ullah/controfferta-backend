@@ -1,44 +1,51 @@
 import { Schema, model } from 'mongoose';
+import { SupportPriority, SupportStatus } from './support.constants';
 import { ISupport, SupportModel } from './support.interface';
-import { SupportStatus, SupportType } from './support.constants';
 
-const supportSchema = new Schema<ISupport, SupportModel>({
-  user: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
+const supportSchema = new Schema<ISupport, SupportModel>(
+  {
+    firstName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+    },
+    subject: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    message: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: Object.values(SupportStatus),
+      default: SupportStatus.Open,
+    },
+    priority: {
+      type: String,
+      enum: Object.values(SupportPriority),
+      default: SupportPriority.Medium,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
-  type: {
-    type: String,
-    enum: Object.values(SupportType),
-    required: true,
-  },
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    maxlength: 200,
-  },
-  message: {
-    type: String,
-    required: true,
-    trim: true,
-    minlength: 10,
-  },
-  phone: {
-    type: String,
-    trim: true,
-    default: ""
-  },
-  status: {
-    type: String,
-    enum: Object.values(SupportStatus),
-    default: SupportStatus.Open,
-  },
-},
-  { timestamps: true });
-
-export const Support = model<ISupport, SupportModel>(
-  'Support',
-  supportSchema
+  { timestamps: true },
 );
+
+export const Support = model<ISupport, SupportModel>('Support', supportSchema);

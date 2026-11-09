@@ -1,75 +1,87 @@
 import { Request, Response } from 'express';
-import { SupportServices } from './support.service';
+import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
-import { StatusCodes } from 'http-status-codes';
+import { SupportServices } from './support.service';
 
-// create support ticket
-const createSupport = catchAsync(async (req: Request, res: Response) => {
-  const result = await SupportServices.createSupport({ user: req.user.id, ...req.body });
+// create support message
+const createSupportController = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await SupportServices.createSupportService(req.body);
 
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Support ticket created successfully",
-    data: result,
-  });
-})
+    sendResponse(res, {
+      statusCode: StatusCodes.CREATED,
+      success: true,
+      message: 'Support message sent successfully',
+      data: result,
+    });
+  },
+);
 
-// update support
-const updateSupport = catchAsync(async (req: Request, res: Response) => {
-  const result = await SupportServices.updateSupport(req.params.id, req.body);
+// update support message
+const updateSupportController = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await SupportServices.updateSupportService(
+      req.params.id,
+      req.body,
+    );
 
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Support ticket updated successfully",
-    data: result,
-  });
-})
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Support message updated successfully',
+      data: result,
+    });
+  },
+);
 
-// get single support
-const getSingleById = catchAsync(async (req: Request, res: Response) => {
-  const result = await SupportServices.getSingleById(req.params.id);
+// delete support message
+const deleteSupportController = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await SupportServices.deleteSupportService(req.params.id);
 
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Support ticket fetched successfully",
-    data: result,
-  });
-})
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Support message deleted successfully',
+      data: result,
+    });
+  },
+);
 
-// get by user id
-const getByUserId = catchAsync(async (req: Request, res: Response) => {
-  const result = await SupportServices.getByUserId(req.user.id, req.query);
+// get support message by id
+const getSupportByIdController = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await SupportServices.getSupportByIdService(req.params.id);
 
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Support tickets fetched successfully",
-    data: result.data,
-    pagination: result.pagination
-  });
-})
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Support message fetched successfully',
+      data: result,
+    });
+  },
+);
 
-// get all supports
-const getAllSupports = catchAsync(async (req: Request, res: Response) => {
-  const result = await SupportServices.getAllSupports(req.query);
+// get support messages
+const getSupportsController = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await SupportServices.getSupportsService(req.query);
 
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Support tickets fetched successfully",
-    data: result.data,
-    pagination: result.pagination
-  });
-})
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: 'Support messages fetched successfully',
+      data: result.data,
+      pagination: result.pagination,
+    });
+  },
+);
 
 export const SupportController = {
-  createSupport,
-  updateSupport,
-  getSingleById,
-  getByUserId,
-  getAllSupports
+  createSupportController,
+  updateSupportController,
+  deleteSupportController,
+  getSupportByIdController,
+  getSupportsController,
 };
