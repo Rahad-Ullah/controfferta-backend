@@ -10,6 +10,7 @@ import { registerCreditLedgerDocs } from '../app/modules/creditLedger/creditLedg
 import { registerLeadDocs } from '../app/modules/lead/lead.doc';
 import { registerLeadAccessDocs } from '../app/modules/leadAccess/leadAccess.doc';
 import { registerPlatformReviewDocs } from '../app/modules/platformReview/platformReview.doc';
+import { registerBlogDocs } from '../app/modules/blog/blog.doc';
 import { registerUserDocs } from '../app/modules/user/user.doc';
 import config from '../config';
 
@@ -29,6 +30,7 @@ export function generateOpenApiDocumentV1() {
   registerLeadDocs();
   registerLeadAccessDocs();
   registerPlatformReviewDocs();
+  registerBlogDocs();
   registerCreditPackageDocs();
   registerCreditPurchaseDocs();
   registerCreditLedgerDocs();
