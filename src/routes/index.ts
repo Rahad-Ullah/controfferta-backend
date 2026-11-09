@@ -14,6 +14,7 @@ import { faqRoutes } from '../app/modules/faq/faq.route';
 import { categoryRoutes } from '../app/modules/category/category.route';
 import { leadRoutes } from '../app/modules/lead/lead.route';
 import { leadAccessRoutes } from '../app/modules/leadAccess/leadAccess.route';
+import { platformReviewRoutes } from '../app/modules/platformReview/platformReview.route';
 import { creditPackageRoutes } from '../app/modules/creditPackage/creditPackage.route';
 import { creditPurchaseRoutes } from '../app/modules/creditPurchase/creditPurchase.route';
 import { creditLedgerRoutes } from '../app/modules/creditLedger/creditLedger.route';
@@ -76,6 +77,10 @@ const apiRoutes: { path: string; route: any }[] = [
   {
     path: '/lead-accesses',
     route: leadAccessRoutes,
+  },
+  {
+    path: '/platform-reviews',
+    route: platformReviewRoutes,
   },
   {
     path: '/credit-packages',
