@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { DEFAULT_WELCOME_CREDIT_AMOUNT } from './setting.constants';
 import { ISetting, SettingModel } from './setting.interface';
 
 const settingSchema = new Schema<ISetting, SettingModel>({
@@ -97,7 +98,7 @@ const settingSchema = new Schema<ISetting, SettingModel>({
   },
   welcomeCreditAmount: {
     type: Number,
-    default: 0,
+    default: DEFAULT_WELCOME_CREDIT_AMOUNT,
     min: 0,
   },
 });

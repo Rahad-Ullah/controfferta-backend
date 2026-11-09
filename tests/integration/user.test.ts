@@ -1,6 +1,8 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import app from '../../src/app';
+import { CreditLedgerType } from '../../src/app/modules/creditLedger/creditLedger.constant';
+import { CreditLedger } from '../../src/app/modules/creditLedger/creditLedger.model';
 import { Provider } from '../../src/app/modules/provider/provider.model';
 import { BusinessType } from '../../src/app/modules/provider/provider.constant';
 import { User } from '../../src/app/modules/user/user.model';
@@ -53,7 +55,12 @@ describe('User API', () => {
       user: savedProvider?._id,
     });
     expect(providerProfile?.businessName).toBe('Rossi Impianti');
-    expect(providerProfile?.creditBalance).toBe(0);
+    expect(providerProfile?.creditBalance).toBe(15);
+    const welcome = await CreditLedger.findOne({
+      provider: providerProfile?._id,
+    });
+    expect(welcome?.type).toBe(CreditLedgerType.Welcome);
+    expect(welcome?.amount).toBe(15);
     expect(savedProvider?.roleRef?.toString()).toBe(
       providerProfile?._id.toString(),
     );

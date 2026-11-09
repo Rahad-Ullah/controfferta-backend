@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import QueryBuilder from '../../builder/QueryBuilder';
 import ApiError from '../../../errors/ApiError';
 import { Provider } from '../provider/provider.model';
+import { DEFAULT_WELCOME_CREDIT_AMOUNT } from '../setting/setting.constants';
 import { Setting } from '../setting/setting.model';
 import { UserRole } from '../user/user.constant';
 import {
@@ -104,7 +105,7 @@ const grantWelcomeCredits = async (
   session: ClientSession,
 ) => {
   const setting = await Setting.findOne().session(session);
-  const amount = setting?.welcomeCreditAmount ?? 0;
+  const amount = setting?.welcomeCreditAmount ?? DEFAULT_WELCOME_CREDIT_AMOUNT;
   if (amount <= 0) return null;
 
   return postCreditLedger({

@@ -327,7 +327,7 @@ One document for the site.
 | Field | Type | Notes |
 | :--- | :--- | :--- |
 | `_id` | ObjectId | |
-| `welcomeCreditAmount` | integer | Credits granted once when a provider registers |
+| `welcomeCreditAmount` | integer | Credits granted once when a provider registers. Defaults to 15 when the setting is missing. |
 | `contactInfo.email` | string | |
 | `contactInfo.phone` | string | |
 | `contactInfo.whatsApp` | string | |

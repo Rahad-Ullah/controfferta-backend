@@ -1,0 +1,1 @@
+export const DEFAULT_WELCOME_CREDIT_AMOUNT = 15;
