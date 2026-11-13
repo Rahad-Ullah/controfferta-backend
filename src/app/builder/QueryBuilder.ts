@@ -1,5 +1,19 @@
 import { FilterQuery, Query } from 'mongoose';
 
+const MAX_PAGE_LIMIT = 60;
+
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const pageLimit = (raw: unknown, fallback: number) => {
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    return fallback;
+  }
+
+  return Math.min(limit, MAX_PAGE_LIMIT);
+};
+
 class QueryBuilder<T> {
   public modelQuery: Query<T[], T>;
   public query: Record<string, unknown>;
@@ -17,7 +31,7 @@ class QueryBuilder<T> {
           field =>
           ({
             [field]: {
-              $regex: this.query.searchTerm,
+              $regex: escapeRegex(String(this.query.searchTerm)),
               $options: 'i',
             },
           } as FilterQuery<T>)
@@ -48,7 +62,7 @@ class QueryBuilder<T> {
 
   //pagination
   paginate() {
-    const limit = Number(this?.query?.limit) || 10;
+    const limit = pageLimit(this?.query?.limit, 10);
     const page = Number(this?.query?.page) || 1;
     const skip = (page - 1) * limit;
 
@@ -82,7 +96,7 @@ class QueryBuilder<T> {
     const total = await this.modelQuery.model.countDocuments(
       this.modelQuery.getFilter()
     );
-    const limit = Number(this?.query?.limit) || 12;
+    const limit = pageLimit(this?.query?.limit, 12);
     const page = Number(this?.query?.page) || 1;
     const totalPage = Math.ceil(total / limit);
 

@@ -9,6 +9,46 @@ import { authHeader } from '../helpers/auth.helper';
 import { createTestUser } from '../helpers/user.helper';
 
 describe('Lead API', () => {
+  it('rejects a lead feed page above 60 and an unknown sort', async () => {
+    const { token } = await createTestUser({
+      email: 'provider.limit@example.com',
+      role: UserRole.Provider,
+    });
+
+    const allowed = await request(app)
+      .get('/api/v1/leads?limit=60')
+      .set('Authorization', authHeader(token));
+    expect(allowed.status).toBe(200);
+
+    const overLimit = await request(app)
+      .get('/api/v1/leads?limit=61')
+      .set('Authorization', authHeader(token));
+    expect(overLimit.status).toBe(400);
+    expect(overLimit.body.success).toBe(false);
+    expect(overLimit.body.errorMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'limit',
+          message: 'Limit cannot be greater than 60',
+        }),
+      ]),
+    );
+
+    const badSort = await request(app)
+      .get('/api/v1/leads?sort=password')
+      .set('Authorization', authHeader(token));
+    expect(badSort.status).toBe(400);
+    expect(badSort.body.success).toBe(false);
+    expect(badSort.body.errorMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'sort',
+          message: 'Sort field is not allowed',
+        }),
+      ]),
+    );
+  });
+
   it('submits a lead without an account and publishes it to providers', async () => {
     const category = await Category.create({
       name: 'Solar',
@@ -99,6 +139,12 @@ describe('Lead API', () => {
       .send({ status: LeadStatus.Accepted });
     expect(accepted.status).toBe(200);
     expect(accepted.body.data.status).toBe(LeadStatus.Accepted);
+
+    const literalDot = await request(app)
+      .get(`/api/v1/leads?searchTerm=${encodeURIComponent('.')}`)
+      .set('Authorization', authHeader(providerToken));
+    expect(literalDot.status).toBe(200);
+    expect(literalDot.body.data).toEqual([]);
 
     const feed = await request(app)
       .get(`/api/v1/leads?searchTerm=${encodeURIComponent('Via Roma')}`)

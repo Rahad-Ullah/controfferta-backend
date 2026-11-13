@@ -12,6 +12,44 @@ const dateString = z
   .string()
   .refine(value => !Number.isNaN(Date.parse(value)), 'Invalid date');
 
+const searchTerm = z.string().trim().max(100, 'Search term is too long').optional();
+
+const pageLimit = z
+  .string()
+  .regex(/^\d+$/, 'Limit must be a whole number')
+  .refine(value => Number(value) >= 1, 'Limit must be at least 1')
+  .refine(value => Number(value) <= 60, 'Limit cannot be greater than 60')
+  .optional();
+
+const sortQuery = (allowed: readonly string[]) =>
+  z
+    .string()
+    .refine(value => {
+      return value.split(',').every(part => {
+        const field = part.startsWith('-') ? part.slice(1) : part;
+        return allowed.includes(field);
+      });
+    }, 'Sort field is not allowed')
+    .optional();
+
+const feedSortFields = [
+  'createdAt',
+  'updatedAt',
+  'title',
+  'address',
+  'timeline',
+  'budgetRange.minimum',
+  'budgetRange.maximum',
+] as const;
+
+const adminSortFields = [
+  ...feedSortFields,
+  'status',
+  'uid',
+  'client.name',
+  'client.email',
+] as const;
+
 const createLeadValidation = z.object({
   body: z
     .object({
@@ -104,13 +142,13 @@ const leadIdValidation = z.object({
 const leadFeedValidation = z.object({
   query: z
     .object({
-      searchTerm: z.string().optional(),
+      searchTerm,
       category: optionalObjectId('category'),
       from: dateString.optional(),
       to: dateString.optional(),
       page: z.string().optional(),
-      limit: z.string().optional(),
-      sort: z.string().optional(),
+      limit: pageLimit,
+      sort: sortQuery(feedSortFields),
     })
     .strict(),
 });
@@ -118,12 +156,12 @@ const leadFeedValidation = z.object({
 const getAllLeadsValidation = z.object({
   query: z
     .object({
-      searchTerm: z.string().optional(),
+      searchTerm,
       category: optionalObjectId('category'),
       status: z.nativeEnum(LeadStatus).optional(),
       page: z.string().optional(),
-      limit: z.string().optional(),
-      sort: z.string().optional(),
+      limit: pageLimit,
+      sort: sortQuery(adminSortFields),
     })
     .strict(),
 });

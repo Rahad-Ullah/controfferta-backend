@@ -38,6 +38,21 @@ describe('QueryBuilder', () => {
     expect(modelQuery.limit).toHaveBeenCalledWith(5);
     expect(modelQuery.select).toHaveBeenCalledWith('email role');
   });
+
+  it('escapes search text and caps the page size at 60', () => {
+    const modelQuery = fakeQuery();
+    const builder = new QueryBuilder(modelQuery, {
+      searchTerm: 'via.roma',
+      limit: '500',
+    });
+
+    builder.search(['address']).paginate();
+
+    expect(modelQuery.find).toHaveBeenCalledWith({
+      $or: [{ address: { $regex: 'via\\.roma', $options: 'i' } }],
+    });
+    expect(modelQuery.limit).toHaveBeenCalledWith(60);
+  });
 });
 
 describe('ElasticQueryBuilder', () => {
