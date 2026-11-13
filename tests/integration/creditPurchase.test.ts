@@ -295,4 +295,128 @@ describe('Credit purchase API', () => {
     const afterExpiry = await Provider.findById(provider._id);
     expect(afterExpiry?.creditBalance).toBe(100);
   });
+
+  it('takes the credits back when the paid charge is refunded', async () => {
+    const { token: adminToken } = await createTestUser({
+      email: 'admin@example.com',
+      role: UserRole.Admin,
+    });
+    const { user, token: providerToken } = await createTestUser({
+      email: 'provider@example.com',
+      role: UserRole.Provider,
+    });
+    const provider = await Provider.create({
+      user: user._id,
+      businessName: 'Acme Solar',
+      businessType: BusinessType.Company,
+    });
+    await User.updateOne({ _id: user._id }, { roleRef: provider._id });
+
+    const createdPackage = await request(app)
+      .post('/api/v1/credit-packages/create')
+      .set('Authorization', authHeader(adminToken))
+      .send({
+        name: 'Starter',
+        description: '100 credits',
+        creditsAmount: 100,
+        price: 49,
+      });
+    expect(createdPackage.status).toBe(201);
+    const packageId = createdPackage.body.data._id;
+
+    const started = await request(app)
+      .post('/api/v1/credit-purchases/create')
+      .set('Authorization', authHeader(providerToken))
+      .send({ package: packageId });
+    expect(started.status).toBe(201);
+    const purchaseId = started.body.data.purchase._id;
+
+    const sendWebhook = (event: {
+      id: string;
+      type: string;
+      data: { object: Record<string, unknown> };
+    }) => {
+      harness().stripeMock.webhooks.constructEvent.mockImplementationOnce(
+        () => event,
+      );
+      return request(app)
+        .post('/webhooks/stripe')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', 't=1,v1=abc')
+        .send('{}');
+    };
+
+    const paid = await sendWebhook(
+      checkoutEvent(
+        'evt_credit_refund_paid',
+        'checkout.session.completed',
+        purchaseId,
+        user._id.toString(),
+      ),
+    );
+    expect(paid.status).toBe(200);
+
+    await Provider.updateOne({ _id: provider._id }, { creditBalance: 10 });
+    const spent = await sendWebhook({
+      id: 'evt_credit_refund_spent',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_test_mock123',
+          payment_intent: 'pi_test_mock123',
+          metadata: {},
+        },
+      },
+    });
+    expect(spent.status).toBe(500);
+    const stillPaid = await Provider.findById(provider._id);
+    expect(stillPaid?.creditBalance).toBe(10);
+
+    await Provider.updateOne({ _id: provider._id }, { creditBalance: 100 });
+    const refunded = await sendWebhook({
+      id: 'evt_credit_refund_1',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_test_mock123',
+          payment_intent: 'pi_test_mock123',
+          metadata: {},
+        },
+      },
+    });
+    expect(refunded.status).toBe(200);
+
+    const again = await sendWebhook({
+      id: 'evt_credit_refund_2',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_test_mock123',
+          payment_intent: 'pi_test_mock123',
+          metadata: {},
+        },
+      },
+    });
+    expect(again.status).toBe(200);
+
+    const view = await request(app)
+      .get(`/api/v1/credit-purchases/${purchaseId}`)
+      .set('Authorization', authHeader(adminToken));
+    expect(view.body.data.paymentStatus).toBe(CreditPaymentStatus.Refunded);
+
+    const balance = await Provider.findById(provider._id);
+    expect(balance?.creditBalance).toBe(0);
+    const ledger = await CreditLedger.find({ provider: provider._id }).sort({
+      amount: -1,
+    });
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]).toMatchObject({
+      type: CreditLedgerType.Refund,
+      amount: -100,
+      balanceAfter: 0,
+    });
+
+    const sold = await request(app).get(`/api/v1/credit-packages/${packageId}`);
+    expect(sold.body.data.purchaseCount).toBe(0);
+  });
 });

@@ -106,7 +106,60 @@ const failCreditPurchase = async (
   );
 };
 
+// ---------------- refund credit purchase ----------------
+// the paid purchase and the credit reversal commit together
+const refundCreditPurchase = async (purchaseId: string) => {
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const purchase = await CreditPurchase.findOneAndUpdate(
+      {
+        _id: purchaseId,
+        paymentStatus: CreditPaymentStatus.Paid,
+      },
+      { paymentStatus: CreditPaymentStatus.Refunded },
+      { new: true, session },
+    );
+    if (!purchase) {
+      await session.abortTransaction();
+      return;
+    }
+
+    await CreditPackage.updateOne(
+      { _id: purchase.package },
+      { $inc: { purchaseCount: -1 } },
+      { session },
+    );
+
+    await CreditLedgerServices.postCreditLedger({
+      providerId: purchase.provider.toString(),
+      type: CreditLedgerType.Refund,
+      amount: -purchase.creditsAmount,
+      reference: {
+        type: CreditLedgerReferenceType.CreditPurchase,
+        id: purchase._id.toString(),
+      },
+      session,
+    });
+
+    await session.commitTransaction();
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    if (
+      error instanceof ApiError &&
+      error.statusCode === StatusCodes.CONFLICT
+    ) {
+      return;
+    }
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
 export const StripeFulfillment = {
   fulfillCreditPurchase,
   failCreditPurchase,
+  refundCreditPurchase,
 };

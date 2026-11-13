@@ -308,7 +308,7 @@ const onRefundSuccess = async (event: Stripe.Event) => {
 
   const { transactionId } = charge.metadata || {};
 
-  if (!paymentIntentId) {
+  if (!paymentIntentId && !transactionId) {
     console.error(
       `[Stripe Webhook Error] Missing payment_intent in refund charge: ${charge.id}`,
     );
@@ -316,8 +316,16 @@ const onRefundSuccess = async (event: Stripe.Event) => {
   }
 
   try {
-    // 1. Find the original payment transaction
-    const transaction = await Transaction.findById(transactionId);
+    // 1. Checkout metadata lives on the session. The paid charge is found by the payment intent.
+    let transaction = null;
+    if (transactionId) {
+      transaction = await Transaction.findById(transactionId);
+    } else if (paymentIntentId) {
+      transaction = await Transaction.findOne({
+        gateway: TransactionGateway.Stripe,
+        gatewayReferenceId: paymentIntentId,
+      });
+    }
 
     if (!transaction) {
       console.error(
@@ -326,7 +334,17 @@ const onRefundSuccess = async (event: Stripe.Event) => {
       return;
     }
 
-    // 2. Update the transaction status and refund fields
+    // 2. Refund the credit purchase
+    if (
+      transaction.reference?.type === TransactionReferenceType.CreditPurchase &&
+      transaction.reference.id
+    ) {
+      await StripeFulfillment.refundCreditPurchase(
+        transaction.reference.id.toString(),
+      );
+    }
+
+    // 3. Update the transaction status to completed
     const updatedTransaction = await Transaction.findByIdAndUpdate(
       transaction._id,
       {
@@ -339,18 +357,15 @@ const onRefundSuccess = async (event: Stripe.Event) => {
       { new: true },
     );
 
-    // 3. Reverse Fulfillment Logic (Release the held resource)
-    // todo: reverse fulfillment logic
-
-    console.log(
+    console.info(
       `[Stripe Webhook Success][${event.type}] Transaction ${transaction._id} marked as ${updatedTransaction?.status}. Total refunded: ${updatedTransaction?.amount}.`,
     );
   } catch (error: any) {
-    console.error(
-      `[Database Error] Failed to process refund success for payment_intent ${paymentIntentId}:`,
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      `[Stripe Webhook Error] Failed to process refund success for payment_intent ${paymentIntentId}:`,
       error.message,
     );
-    throw error;
   }
 };
 
