@@ -25,6 +25,7 @@ const updateTransactionStatus = catchAsync(
 const getSingleTransaction = catchAsync(async (req: Request, res: Response) => {
   const result = await TransactionServices.getSingleTransaction(
     req.params.id as string,
+    req.user,
   );
 
   sendResponse(res, {

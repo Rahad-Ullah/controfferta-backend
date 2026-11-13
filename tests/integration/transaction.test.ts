@@ -19,6 +19,11 @@ describe('Transaction API', () => {
       email: 'admin@example.com',
       role: UserRole.Admin,
     });
+    const { token: superToken } = await createTestUser({
+      email: 'super@example.com',
+      role: UserRole.SuperAdmin,
+    });
+    const stranger = await createTestUser({ email: 'stranger@example.com' });
 
     const txn = await Transaction.create({
       user: user._id,
@@ -42,6 +47,31 @@ describe('Transaction API', () => {
         expect.objectContaining({ gatewayReferenceId: 'pi_user_1' }),
       ]),
     );
+
+    const ownSingle = await request(app)
+      .get(`/api/v1/transactions/single/${txn._id}`)
+      .set('Authorization', authHeader(token));
+    expect(ownSingle.status).toBe(200);
+    expect(ownSingle.body.data.gatewayReferenceId).toBe('pi_user_1');
+
+    const otherSingle = await request(app)
+      .get(`/api/v1/transactions/single/${txn._id}`)
+      .set('Authorization', authHeader(stranger.token));
+    expect(otherSingle.status).toBe(403);
+    expect(otherSingle.body.success).toBe(false);
+    expect(otherSingle.body.message).toBe(
+      'You cannot view this transaction',
+    );
+
+    const adminSingle = await request(app)
+      .get(`/api/v1/transactions/single/${txn._id}`)
+      .set('Authorization', authHeader(adminToken));
+    expect(adminSingle.status).toBe(200);
+
+    const superSingle = await request(app)
+      .get(`/api/v1/transactions/single/${txn._id}`)
+      .set('Authorization', authHeader(superToken));
+    expect(superSingle.status).toBe(200);
 
     const forbidden = await request(app)
       .get('/api/v1/transactions/all')

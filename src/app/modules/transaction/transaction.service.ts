@@ -1,3 +1,4 @@
+import { JwtPayload } from 'jsonwebtoken';
 import { Transaction } from './transaction.model';
 import { ITransaction } from './transaction.interface';
 import ApiError from '../../../errors/ApiError';
@@ -10,6 +11,7 @@ import {
 import config from '../../../config';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { User } from '../user/user.model';
+import { UserRole } from '../user/user.constant';
 import { stripe } from '../../../config/stripe';
 import { IUser } from '../user/user.interface';
 
@@ -129,15 +131,23 @@ const updateTransactionStatus = async (
 };
 
 // ------------- get single transaction ----------------
-const getSingleTransaction = async (id: string) => {
-  const result = await Transaction.findById(id)
-    .populate('user')
-    .populate('reference.id');
-
+const getSingleTransaction = async (id: string, caller: JwtPayload) => {
+  const result = await Transaction.findById(id);
   if (!result) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Transaction not found');
   }
 
+  const isStaff =
+    caller.role === UserRole.Admin || caller.role === UserRole.SuperAdmin;
+  if (!isStaff && result.user.toString() !== caller.id) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'You cannot view this transaction',
+    );
+  }
+
+  await result.populate('user');
+  await result.populate('reference.id');
   return result;
 };
 
