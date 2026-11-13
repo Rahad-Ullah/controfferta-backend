@@ -82,6 +82,16 @@ const createChangePasswordZodSchema = z.object({
     }),
 });
 
+const logoutZodSchema = z.object({
+  body: z
+    .object({
+      sessionId: z
+        .string({ error: 'Session id is required' })
+        .nonempty("Session id can't be empty!"),
+    })
+    .strict(),
+});
+
 // refresh token
 const refreshTokenZodSchema = z.object({
   body: z
@@ -100,4 +110,5 @@ export const AuthValidation = {
   createResetPasswordZodSchema,
   createChangePasswordZodSchema,
   refreshTokenZodSchema,
+  logoutZodSchema,
 };

@@ -78,4 +78,15 @@ router.post(
   AuthController.refreshToken,
 );
 
+router.post(
+  '/logout',
+  auth(),
+  validateRequest(AuthValidation.logoutZodSchema),
+  AuthController.logout,
+);
+
+router.post('/logout-all', auth(), AuthController.logoutAll);
+
+router.get('/sessions', auth(), AuthController.listSessions);
+
 export const AuthRoutes = router;

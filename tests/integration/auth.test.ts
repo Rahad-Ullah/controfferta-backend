@@ -335,17 +335,16 @@ describe('Auth API', () => {
   });
 
   describe('POST /api/v1/auth/refresh-token', () => {
-    it('returns a new access token', async () => {
-      const { user } = await createTestUser();
-      const refreshToken = createRefreshToken(
-        user.role,
-        user._id.toString(),
-        user.email,
-      );
+    it('returns a new access token for an active login session', async () => {
+      await User.create(testUserData);
+      const login = await request(app).post('/api/v1/auth/login').send({
+        email: testUserData.email,
+        password: testUserData.password,
+      });
 
       const res = await request(app)
         .post('/api/v1/auth/refresh-token')
-        .send({ refreshToken });
+        .send({ refreshToken: login.body.data.refreshToken });
 
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Token refreshed successfully');
@@ -372,6 +371,25 @@ describe('Auth API', () => {
       expect(res.body.message).toMatch(/suspended/i);
     });
 
+    it('returns 401 when the refresh token has no login session', async () => {
+      const { user } = await createTestUser();
+      const refreshToken = createRefreshToken(
+        user.role,
+        user._id.toString(),
+        user.email,
+      );
+
+      const res = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toBe(
+        'This session has ended. Please log in again.',
+      );
+    });
+
     it('returns 400 when the refresh token is missing', async () => {
       const res = await request(app)
         .post('/api/v1/auth/refresh-token')
@@ -380,6 +398,182 @@ describe('Auth API', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.errorMessages).toBeDefined();
+    });
+  });
+
+  describe('login sessions', () => {
+    const loginAs = (email: string, userAgent: string) =>
+      request(app)
+        .post('/api/v1/auth/login')
+        .set('User-Agent', userAgent)
+        .send({ email, password: 'Password123!' });
+
+    it('lists each device and logs out only that session', async () => {
+      await createTestUser();
+      const phone = await loginAs('jane.doe@example.com', 'PhoneApp/1.0');
+      const laptop = await loginAs('jane.doe@example.com', 'LaptopBrowser/2.0');
+      expect(phone.status).toBe(200);
+      expect(laptop.status).toBe(200);
+
+      const listed = await request(app)
+        .get('/api/v1/auth/sessions')
+        .set('Authorization', authHeader(phone.body.data.accessToken));
+
+      expect(listed.status).toBe(200);
+      expect(listed.body.message).toBe(
+        'Active sessions retrieved successfully',
+      );
+      expect(listed.body.data.count).toBe(2);
+      expect(listed.body.data.sessions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ userAgent: 'PhoneApp/1.0' }),
+          expect.objectContaining({ userAgent: 'LaptopBrowser/2.0' }),
+        ]),
+      );
+      expect(listed.body.data.sessions[0]).not.toHaveProperty('tokenHash');
+
+      const laptopSession = listed.body.data.sessions.find(
+        (session: { userAgent: string }) =>
+          session.userAgent === 'LaptopBrowser/2.0',
+      );
+      const loggedOut = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', authHeader(phone.body.data.accessToken))
+        .send({ sessionId: laptopSession.id });
+      expect(loggedOut.status).toBe(200);
+      expect(loggedOut.body.message).toBe('Logged out successfully');
+
+      const accessStillWorks = await request(app)
+        .get('/api/v1/users/me')
+        .set('Authorization', authHeader(phone.body.data.accessToken));
+      expect(accessStillWorks.status).toBe(200);
+
+      const laptopRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: laptop.body.data.refreshToken });
+      expect(laptopRefresh.status).toBe(401);
+      expect(laptopRefresh.body.message).toBe(
+        'This session has ended. Please log in again.',
+      );
+
+      const phoneRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: phone.body.data.refreshToken });
+      expect(phoneRefresh.status).toBe(200);
+
+      const remaining = await request(app)
+        .get('/api/v1/auth/sessions')
+        .set('Authorization', authHeader(phone.body.data.accessToken));
+      expect(remaining.body.data.count).toBe(1);
+      expect(remaining.body.data.sessions[0].userAgent).toBe('PhoneApp/1.0');
+    });
+
+    it('logs out every session for the signed-in user', async () => {
+      await createTestUser();
+      await createTestUser({ email: 'other@example.com' });
+      const phone = await loginAs('jane.doe@example.com', 'PhoneApp/1.0');
+      const laptop = await loginAs('jane.doe@example.com', 'LaptopBrowser/2.0');
+      const other = await loginAs('other@example.com', 'OtherPhone/1.0');
+
+      const loggedOut = await request(app)
+        .post('/api/v1/auth/logout-all')
+        .set('Authorization', authHeader(phone.body.data.accessToken));
+      expect(loggedOut.status).toBe(200);
+      expect(loggedOut.body.message).toBe(
+        'Logged out from all sessions successfully',
+      );
+
+      const phoneRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: phone.body.data.refreshToken });
+      const laptopRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: laptop.body.data.refreshToken });
+      expect(phoneRefresh.status).toBe(401);
+      expect(laptopRefresh.status).toBe(401);
+
+      const remaining = await request(app)
+        .get('/api/v1/auth/sessions')
+        .set('Authorization', authHeader(phone.body.data.accessToken));
+      expect(remaining.body.data.count).toBe(0);
+
+      const otherRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: other.body.data.refreshToken });
+      expect(otherRefresh.status).toBe(200);
+
+      const missing = await request(app).post('/api/v1/auth/logout-all');
+      expect(missing.status).toBe(401);
+      expect(missing.body.success).toBe(false);
+    });
+
+    it('returns 401 without a token and 400 for an empty logout body', async () => {
+      const { token } = await createTestUser();
+
+      const missing = await request(app)
+        .post('/api/v1/auth/logout')
+        .send({ sessionId: 'missing-session' });
+      expect(missing.status).toBe(401);
+      expect(missing.body.success).toBe(false);
+
+      const badBody = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', authHeader(token))
+        .send({});
+      expect(badBody.status).toBe(400);
+      expect(badBody.body.success).toBe(false);
+      expect(badBody.body.errorMessages).toBeDefined();
+    });
+
+    it('refuses to log out another user session', async () => {
+      await createTestUser();
+      const other = await createTestUser({ email: 'other@example.com' });
+      const jane = await loginAs('jane.doe@example.com', 'JanePhone/1.0');
+
+      const res = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Authorization', authHeader(other.token))
+        .send({ sessionId: jane.body.data.sessionId });
+
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toBe('Session not found');
+    });
+
+    it('removes login sessions when an admin suspends or deletes the user', async () => {
+      const { user } = await createTestUser();
+      const { token: adminToken } = await createTestUser({
+        email: 'admin@example.com',
+        role: UserRole.Admin,
+      });
+      const jane = await loginAs('jane.doe@example.com', 'JanePhone/1.0');
+
+      const suspended = await request(app)
+        .patch(`/api/v1/users/${user._id}/status`)
+        .set('Authorization', authHeader(adminToken))
+        .send({ status: UserStatus.Suspended });
+      expect(suspended.status).toBe(200);
+
+      await User.findByIdAndUpdate(user._id, { status: UserStatus.Active });
+      const afterSuspend = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: jane.body.data.refreshToken });
+      expect(afterSuspend.status).toBe(401);
+
+      const again = await loginAs('jane.doe@example.com', 'JanePhone/1.0');
+      const deleted = await request(app)
+        .delete(`/api/v1/users/${user._id}`)
+        .set('Authorization', authHeader(adminToken));
+      expect(deleted.status).toBe(200);
+
+      await User.findByIdAndUpdate(user._id, { isDeleted: false });
+      const afterDelete = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: again.body.data.refreshToken });
+      expect(afterDelete.status).toBe(401);
+      expect(afterDelete.body.message).toBe(
+        'This session has ended. Please log in again.',
+      );
     });
   });
 

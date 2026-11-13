@@ -53,4 +53,26 @@ export function registerAuthDocs() {
     isAuth: false,
     body: AuthValidation.refreshTokenZodSchema.shape.body,
   });
+
+  registerAuth({
+    method: 'post',
+    path: '/auth/logout',
+    summary: 'Log out active session',
+    isAuth: true,
+    body: AuthValidation.logoutZodSchema.shape.body,
+  });
+
+  registerAuth({
+    method: 'post',
+    path: '/auth/logout-all',
+    summary: 'Log out every active session',
+    isAuth: true,
+  });
+
+  registerAuth({
+    method: 'get',
+    path: '/auth/sessions',
+    summary: 'List active login sessions',
+    isAuth: true,
+  });
 }

@@ -26,11 +26,44 @@ import {
 import { ResetToken } from '../resetToken/resetToken.model';
 import { User } from '../user/user.model';
 import { UserStatus } from '../user/user.constant';
+import { AuthSession, SessionClient } from './auth.session';
 
 const LOCKED_OTP_MESSAGE = 'Too many incorrect codes. Request a new one.';
 
+const issueSessionTokens = async (
+  user: { _id: unknown; role: string; email: string },
+  client: SessionClient,
+) => {
+  const sessionId = AuthSession.newSessionId();
+  const accessToken = jwtHelper.createToken(
+    { id: user._id, role: user.role, email: user.email },
+    config.jwt.jwt_secret as Secret,
+    config.jwt.jwt_expire_in as string,
+  );
+  const refreshToken = jwtHelper.createToken(
+    { id: user._id, role: user.role, email: user.email, sid: sessionId },
+    config.jwt.jwt_refresh_secret as Secret,
+    config.jwt.jwt_refresh_expire_in as string,
+  );
+  const session = await AuthSession.createLoginSession(
+    sessionId,
+    String(user._id),
+    refreshToken,
+    client,
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    sessionId: session.id,
+    role: user.role,
+    email: user.email,
+    _id: user._id,
+  };
+};
+
 //------------------ login service ------------------
-const loginUserFromDB = async (payload: ILoginData) => {
+const loginUserFromDB = async (payload: ILoginData, client: SessionClient) => {
   const { email, password } = payload;
   const isExistUser = await User.findOne({ email }).select('+password');
   if (!isExistUser) {
@@ -77,27 +110,7 @@ const loginUserFromDB = async (payload: ILoginData) => {
     );
   }
 
-  //create access token
-  const accessToken = jwtHelper.createToken(
-    { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
-    config.jwt.jwt_secret as Secret,
-    config.jwt.jwt_expire_in as string,
-  );
-
-  // refresh token
-  const refreshToken = jwtHelper.createToken(
-    { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
-    config.jwt.jwt_refresh_secret as Secret,
-    config.jwt.jwt_refresh_expire_in as string,
-  );
-
-  return {
-    accessToken,
-    refreshToken,
-    role: isExistUser.role,
-    email: isExistUser.email,
-    _id: isExistUser._id,
-  };
+  return issueSessionTokens(isExistUser, client);
 };
 
 //forget password
@@ -130,7 +143,10 @@ const forgetPasswordToDB = async (email: string) => {
 };
 
 //verify email
-const verifyEmailToDB = async (payload: IVerifyEmail) => {
+const verifyEmailToDB = async (
+  payload: IVerifyEmail,
+  client: SessionClient,
+) => {
   const { email, oneTimeCode } = payload;
   const existingUser = await User.findOne({ email }).select('+authentication');
   if (!existingUser) {
@@ -200,25 +216,8 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
       },
     );
 
-    const accessToken = jwtHelper.createToken(
-      { id: existingUser._id, role: existingUser.role, email: existingUser.email },
-      config.jwt.jwt_secret as Secret,
-      config.jwt.jwt_expire_in as string,
-    );
-    const refreshToken = jwtHelper.createToken(
-      { id: existingUser._id, role: existingUser.role, email: existingUser.email },
-      config.jwt.jwt_refresh_secret as Secret,
-      config.jwt.jwt_refresh_expire_in as string,
-    );
-
     message = 'Email verify successfully';
-    data = {
-      accessToken,
-      refreshToken,
-      role: existingUser.role,
-      email: existingUser.email,
-      _id: existingUser._id,
-    };
+    data = await issueSessionTokens(existingUser, client);
   } else {
     await User.findOneAndUpdate(
       { _id: existingUser._id },
@@ -364,6 +363,20 @@ const refreshTokenToDB = async (token: string) => {
     );
   }
 
+  const session = await AuthSession.readSession(String(decoded.sid ?? ''));
+  if (
+    !AuthSession.matchesRefreshToken(
+      session,
+      isExistUser._id.toString(),
+      token,
+    )
+  ) {
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      'This session has ended. Please log in again.',
+    );
+  }
+
   const accessToken = jwtHelper.createToken(
     { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
     config.jwt.jwt_secret as Secret,
@@ -373,6 +386,25 @@ const refreshTokenToDB = async (token: string) => {
   return { accessToken };
 };
 
+const logoutFromDB = async (userId: string, sessionId: string) => {
+  const removed = await AuthSession.revokeLoginSession(
+    String(userId),
+    sessionId,
+  );
+  if (!removed) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Session not found');
+  }
+};
+
+const logoutAllFromDB = async (userId: string) => {
+  await AuthSession.revokeAllLoginSessions(String(userId));
+};
+
+const listSessionsFromDB = async (userId: string) => {
+  const sessions = await AuthSession.listLoginSessions(String(userId));
+  return { count: sessions.length, sessions };
+};
+
 export const AuthService = {
   verifyEmailToDB,
   loginUserFromDB,
@@ -380,4 +412,7 @@ export const AuthService = {
   resetPasswordToDB,
   changePasswordToDB,
   refreshTokenToDB,
+  logoutFromDB,
+  logoutAllFromDB,
+  listSessionsFromDB,
 };

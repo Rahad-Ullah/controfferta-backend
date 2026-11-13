@@ -17,6 +17,7 @@ import { MediaUploadServices } from '../mediaUpload/mediaUpload.service';
 import { Provider } from '../provider/provider.model';
 import { CreditLedgerServices } from '../creditLedger/creditLedger.service';
 import { errorLogger } from '../../../shared/logger';
+import { AuthSession } from '../auth/auth.session';
 
 const createUserToDB = async (payload: IRegisterUser) => {
   const session = await mongoose.startSession();
@@ -270,6 +271,10 @@ const updateStatusToDB = async (
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!');
   }
 
+  if (payload.status !== UserStatus.Active) {
+    await AuthSession.revokeAllLoginSessions(id);
+  }
+
   // send notification to user
   sendNotifications({
     type: NotificationType.AccountUpdated,
@@ -302,6 +307,8 @@ const deleteSingleUserFromDB = async (
   if (!result) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
+
+  await AuthSession.revokeAllLoginSessions(userId);
   return result;
 };
 

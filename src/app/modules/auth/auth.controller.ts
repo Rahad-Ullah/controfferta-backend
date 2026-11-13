@@ -3,10 +3,19 @@ import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
 import { AuthService } from './auth.service';
+import { SessionClient } from './auth.session';
+
+const sessionClient = (req: Request): SessionClient => ({
+  userAgent: req.get('user-agent') || 'unknown',
+  ip: req.ip || '',
+});
 
 const verifyEmail = catchAsync(async (req: Request, res: Response) => {
   const { ...verifyData } = req.body;
-  const result = await AuthService.verifyEmailToDB(verifyData);
+  const result = await AuthService.verifyEmailToDB(
+    verifyData,
+    sessionClient(req),
+  );
 
   sendResponse(res, {
     success: true,
@@ -18,7 +27,10 @@ const verifyEmail = catchAsync(async (req: Request, res: Response) => {
 
 const loginUser = catchAsync(async (req: Request, res: Response) => {
   const { ...loginData } = req.body;
-  const result = await AuthService.loginUserFromDB(loginData);
+  const result = await AuthService.loginUserFromDB(
+    loginData,
+    sessionClient(req),
+  );
 
   sendResponse(res, {
     success: true,
@@ -66,6 +78,37 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const logout = catchAsync(async (req: Request, res: Response) => {
+  await AuthService.logoutFromDB(req.user.id, req.body.sessionId);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Logged out successfully',
+  });
+});
+
+const logoutAll = catchAsync(async (req: Request, res: Response) => {
+  await AuthService.logoutAllFromDB(req.user.id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Logged out from all sessions successfully',
+  });
+});
+
+const listSessions = catchAsync(async (req: Request, res: Response) => {
+  const result = await AuthService.listSessionsFromDB(req.user.id);
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: 'Active sessions retrieved successfully',
+    data: result,
+  });
+});
+
 // refresh token
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.refreshTokenToDB(req.body.refreshToken);
@@ -85,4 +128,7 @@ export const AuthController = {
   resetPassword,
   changePassword,
   refreshToken,
+  logout,
+  logoutAll,
+  listSessions,
 };

@@ -56,6 +56,28 @@ const state = vi.hoisted(() => {
       }
       return Promise.resolve(removed);
     }),
+    sadd: vi.fn(function sadd(key: string, ...members: string[]) {
+      const current = JSON.parse(redisStore.get(String(key)) ?? '[]');
+      const set = new Set<string>(Array.isArray(current) ? current : []);
+      for (const member of members) set.add(String(member));
+      redisStore.set(String(key), JSON.stringify([...set]));
+      return Promise.resolve(members.length);
+    }),
+    srem: vi.fn(function srem(key: string, ...members: string[]) {
+      const current = JSON.parse(redisStore.get(String(key)) ?? '[]');
+      const set = new Set<string>(Array.isArray(current) ? current : []);
+      let removed = 0;
+      for (const member of members) {
+        if (set.delete(String(member))) removed += 1;
+      }
+      if (set.size === 0) redisStore.delete(String(key));
+      else redisStore.set(String(key), JSON.stringify([...set]));
+      return Promise.resolve(removed);
+    }),
+    smembers: vi.fn(function smembers(key: string) {
+      const current = JSON.parse(redisStore.get(String(key)) ?? '[]');
+      return Promise.resolve(Array.isArray(current) ? current.map(String) : []);
+    }),
     quit: vi.fn(function quit() {
       return Promise.resolve('OK');
     }),
