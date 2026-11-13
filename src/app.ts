@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import cors from 'cors';
+import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import globalErrorHandler from './app/middlewares/globalErrorHandler';
 import { stripeWebhookController } from './app/webhooks/stripe/stripe.controller';
@@ -11,8 +12,18 @@ import router from './routes';
 
 const app = express();
 
-// trust proxy to get client real ip
-app.set('trust proxy', true);
+// One proxy hop. A client-supplied X-Forwarded-For is not req.ip.
+app.set('trust proxy', 1);
+
+const isProduction = config.node_env === 'production';
+app.use(
+  helmet({
+    contentSecurityPolicy: isProduction,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    hsts: isProduction ? undefined : false,
+  }),
+);
 
 // morgan
 app.use(Morgan.successHandler);
@@ -36,25 +47,25 @@ app.use(express.static('uploads'));
 // api router
 app.use('/api/v1', router);
 
-// Generate doc
-const openApiDocV1 = generateOpenApiDocumentV1();
+// api docs
+if (!isProduction) {
+  const openApiDocV1 = generateOpenApiDocumentV1();
 
-// Route to raw JSON for Postman import
-app.get('/api-docs/v1.json', (_req, res) => res.json(openApiDocV1));
+  app.get('/api-docs/v1.json', (_req, res) => res.json(openApiDocV1));
 
-// Serve the interactive Swagger UI
-app.use(
-  '/api-docs',
-  swaggerUi.serve,
-  swaggerUi.setup(null, {
-    swaggerOptions: {
-      urls: [
-        { url: '/api-docs/v1.json', name: 'v1.0.0 (Latest)' },
-        // new version will be added here
-      ],
-    },
-  }),
-);
+  app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(null, {
+      swaggerOptions: {
+        urls: [
+          { url: '/api-docs/v1.json', name: 'v1.0.0 (Latest)' },
+          // new version will be added here
+        ],
+      },
+    }),
+  );
+}
 
 //live response
 app.get('/', (req: Request, res: Response) => {
