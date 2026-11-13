@@ -100,6 +100,28 @@ describe('User API', () => {
     expect(rejectedAdmin.body.errorMessages).toBeDefined();
   });
 
+  it('returns 429 after too many registration attempts', async () => {
+    let lastStatus = 0;
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const res = await request(app)
+        .post('/api/v1/users/register')
+        .send({
+          firstName: 'New',
+          lastName: 'Client',
+          role: UserRole.Client,
+          email: `rate.limit.${attempt}@example.com`,
+          password: 'Password123!',
+        });
+      lastStatus = res.status;
+      if (attempt < 10) {
+        expect(res.status).toBe(200);
+      }
+    }
+
+    expect(lastStatus).toBe(429);
+    expect(await User.countDocuments({ email: /^rate\.limit\./ })).toBe(10);
+  });
+
   it('lets a user read and update their profile', async () => {
     const { token } = await createTestUser();
 

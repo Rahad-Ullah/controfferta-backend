@@ -36,7 +36,7 @@ export interface IUser {
   isDeleted: boolean;
   authentication?: {
     isResetPassword: boolean;
-    oneTimeCode: number;
+    oneTimeCode: string | null;
     expireAt: Date;
   };
   createdAt: Date;

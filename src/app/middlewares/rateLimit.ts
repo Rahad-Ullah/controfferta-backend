@@ -27,6 +27,7 @@ import { RedisStore } from 'rate-limit-redis';
 import { Request } from 'express';
 import { redis } from '../../config/redis';
 import { ipKeyGenerator } from 'express-rate-limit';
+import crypto from 'crypto';
 
 export interface RateLimitOptions {
   /** Unique namespace identifier for the route/feature (e.g., 'auth_login', 'receipt_ai') */
@@ -47,8 +48,8 @@ export interface RateLimitOptions {
  */
 export const rateLimiter = ({
   prefix,
-  windowMs = 60 * 1000,
-  max,
+  windowMs = 60 * 1000, // 1 minute
+  max = 10, // 10 requests per minute
   message = 'Too many requests. Please slow down and try again later.',
 }: RateLimitOptions) => {
   return rateLimit({
@@ -61,12 +62,23 @@ export const rateLimiter = ({
       message,
     },
     keyGenerator: (req: Request): string => {
-      // Prioritize authenticated user ID, fallback to client IP
-      return (
-        (req as any).user?.id?.toString() ||
-        ipKeyGenerator(req.ip as string) ||
-        'anonymous'
-      );
+      // 1. Authenticated User ID (Most accurate)
+      const userId = (req as any).user?.id?.toString();
+      if (userId) return `user:${userId}`;
+
+      // 2. Custom Device/Browser ID Header (Sent by frontend if available)
+      const deviceId = req.headers['x-device-id'] || (req as any).cookies?.deviceId;
+      if (deviceId) return `device:${deviceId}`;
+
+      // 3. Fallback: Combine IP with a short hash of the User-Agent 
+      // (Helps separate different browsers sharing the same IP address)
+      const ip = ipKeyGenerator(req.ip as string) || 'unknown-ip';
+      const userAgent = req.headers['user-agent'] || 'unknown-ua';
+
+      // Create a quick short hash of the user agent
+      const uaHash = crypto.createHash('md5').update(userAgent).digest('hex').substring(0, 8);
+
+      return `ip-ua:${ip}:${uaHash}`;
     },
     store: new RedisStore({
       // @ts-expect-error ioredis call overloads do not match the store command type

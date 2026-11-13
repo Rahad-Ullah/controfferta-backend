@@ -10,6 +10,7 @@ import {
   createTestToken,
 } from '../helpers/auth.helper';
 import { createTestUser } from '../helpers/user.helper';
+import { redis } from '../../src/config/redis';
 import { initEmailWorker } from '../../src/helpers/email.worker';
 import { harness } from '../harness';
 
@@ -85,6 +86,22 @@ describe('Auth API', () => {
 
       expect(res.status).toBe(407);
       expect(res.body.message).toMatch(/verify your account/i);
+    });
+
+    it('returns 429 after too many login attempts', async () => {
+      let lastStatus = 0;
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        const res = await request(app).post('/api/v1/auth/login').send({
+          email: testUserData.email,
+          password: 'WrongPassword999!',
+        });
+        lastStatus = res.status;
+        if (attempt < 10) {
+          expect(res.status).toBe(400);
+        }
+      }
+
+      expect(lastStatus).toBe(429);
     });
 
     it('returns access and refresh tokens for valid credentials', async () => {
@@ -176,12 +193,21 @@ describe('Auth API', () => {
       await processor!({ name: 'send-email', data: queuedEmail });
       expect(harness().sendMailSpy).toHaveBeenCalled();
 
+      const queuedHtml = String(
+        harness().queueAddSpy.mock.calls.at(-1)?.[1]?.html,
+      );
+      const otp = Number(
+        queuedHtml.match(/letter-spacing: 6px;[\s\S]*?>\s*(\d{6})/)?.[1],
+      );
       const stored = await User.findById(user._id).select('+authentication');
+      expect(stored?.authentication?.oneTimeCode).toMatch(/^[a-f0-9]{64}$/);
+      expect(stored?.authentication?.oneTimeCode).not.toContain(String(otp));
+
       const verifyRes = await request(app)
         .post('/api/v1/auth/verify-email')
         .send({
           email: user.email,
-          oneTimeCode: stored?.authentication?.oneTimeCode,
+          oneTimeCode: otp,
         });
 
       expect(verifyRes.status).toBe(200);
@@ -220,6 +246,91 @@ describe('Auth API', () => {
         password: 'NewPassword456!',
       });
       expect(loginRes.status).toBe(200);
+    });
+
+    it('returns one message when the account is missing, deleted, or suspended', async () => {
+      const sent =
+        'Please check your email. We have sent you a one-time passcode (OTP).';
+      harness().queueAddSpy.mockClear();
+
+      const missing = await request(app)
+        .post('/api/v1/auth/forget-password')
+        .send({ email: 'missing@example.com' });
+      expect(missing.status).toBe(200);
+      expect(missing.body.success).toBe(true);
+      expect(missing.body.message).toBe(sent);
+
+      await createTestUser({ email: 'deleted@example.com' });
+      await User.updateOne(
+        { email: 'deleted@example.com' },
+        { isDeleted: true },
+      );
+      const deleted = await request(app)
+        .post('/api/v1/auth/forget-password')
+        .send({ email: 'deleted@example.com' });
+      expect(deleted.status).toBe(200);
+      expect(deleted.body.message).toBe(sent);
+
+      await createTestUser({
+        email: 'suspended.otp@example.com',
+        status: UserStatus.Suspended,
+      });
+      const suspended = await request(app)
+        .post('/api/v1/auth/forget-password')
+        .send({ email: 'suspended.otp@example.com' });
+      expect(suspended.status).toBe(200);
+      expect(suspended.body.message).toBe(sent);
+      expect(harness().queueAddSpy).not.toHaveBeenCalled();
+    });
+
+    it('locks the code after five wrong attempts', async () => {
+      const { user } = await createTestUser({ isEmailVerified: false });
+      harness().queueAddSpy.mockClear();
+
+      const forgetRes = await request(app)
+        .post('/api/v1/auth/forget-password')
+        .send({ email: user.email });
+      expect(forgetRes.status).toBe(200);
+
+      const otp = Number(
+        String(harness().queueAddSpy.mock.calls.at(-1)?.[1]?.html).match(
+          /letter-spacing: 6px;[\s\S]*?>\s*(\d{6})/,
+        )?.[1],
+      );
+
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        const wrong = await request(app)
+          .post('/api/v1/auth/verify-email')
+          .send({ email: user.email, oneTimeCode: 1 });
+        expect(wrong.status).toBe(400);
+        expect(wrong.body.message).toBe(
+          `Wrong OTP, ${5 - attempt} attempts left`,
+        );
+      }
+
+      const locked = await request(app)
+        .post('/api/v1/auth/verify-email')
+        .send({ email: user.email, oneTimeCode: 1 });
+      expect(locked.status).toBe(400);
+      expect(locked.body.message).toBe(
+        'Too many incorrect codes. Request a new one.',
+      );
+
+      const afterLock = await request(app)
+        .post('/api/v1/auth/verify-email')
+        .send({ email: user.email, oneTimeCode: otp });
+      expect(afterLock.status).toBe(400);
+      expect(afterLock.body.message).toBe(
+        'Too many incorrect codes. Request a new one.',
+      );
+
+      const saved = await User.findById(user._id).select('+authentication');
+      expect(saved?.isEmailVerified).toBe(false);
+      expect(saved?.authentication?.oneTimeCode).toBeNull();
+      expect(redis.expire).toHaveBeenCalledWith(
+        `otp:attempts:${user._id.toString()}`,
+        5 * 60,
+      );
     });
   });
 

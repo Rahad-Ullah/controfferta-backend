@@ -1,14 +1,22 @@
 import express from 'express';
 import auth from '../../middlewares/auth';
+import { rateLimiter } from '../../middlewares/rateLimit';
 import validateRequest from '../../middlewares/validateRequest';
 import { UserController } from './user.controller';
 import { UserValidation } from './user.validation';
 import { UserRole } from './user.constant';
 const router = express.Router();
 
+const registerLimiter = rateLimiter({
+  prefix: 'auth_register',
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per 15 minutes
+});
+
 // create user
 router.post(
   '/register',
+  registerLimiter,
   validateRequest(UserValidation.createUserZodSchema),
   UserController.createUser,
 );

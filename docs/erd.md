@@ -79,7 +79,7 @@ Account document. Matches the current `User` model.
 | `isNotificationEnabled` | boolean | |
 | `isDeleted` | boolean | |
 | `authentication.isResetPassword` | boolean | Hidden |
-| `authentication.oneTimeCode` | number | Hidden |
+| `authentication.oneTimeCode` | string | Hidden. HMAC of the emailed code |
 | `authentication.expireAt` | date | Hidden |
 | `createdAt` | date | |
 | `updatedAt` | date | |

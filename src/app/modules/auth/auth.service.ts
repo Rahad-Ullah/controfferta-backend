@@ -14,9 +14,20 @@ import {
 } from '../../../types/auth';
 import cryptoToken from '../../../utils/cryptoToken';
 import generateOTP from '../../../utils/generateOTP';
+import {
+  OTP_ATTEMPT_LIMIT,
+  OTP_TTL_MS,
+  clearOtpAttempts,
+  getOtpAttempts,
+  hashOtp,
+  otpMatches,
+  recordWrongOtp,
+} from '../../../utils/otp';
 import { ResetToken } from '../resetToken/resetToken.model';
 import { User } from '../user/user.model';
 import { UserStatus } from '../user/user.constant';
+
+const LOCKED_OTP_MESSAGE = 'Too many incorrect codes. Request a new one.';
 
 //------------------ login service ------------------
 const loginUserFromDB = async (payload: ILoginData) => {
@@ -92,29 +103,12 @@ const loginUserFromDB = async (payload: ILoginData) => {
 //forget password
 const forgetPasswordToDB = async (email: string) => {
   const isExistUser = await User.isExistUserByEmail(email);
-  if (!isExistUser) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      config.node_env === 'development'
-        ? "User doesn't exist!"
-        : 'Invalid email',
-    );
-  }
-
-  // check if user is deleted
-  if (isExistUser.isDeleted) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'It looks like your account has been deleted or deactivated.',
-    );
-  }
-
-  //check user status
-  if (isExistUser.status !== UserStatus.Active) {
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      'It looks like your account has been suspended or deactivated.',
-    );
+  if (
+    !isExistUser ||
+    isExistUser.isDeleted ||
+    isExistUser.status !== UserStatus.Active
+  ) {
+    return;
   }
 
   //send mail
@@ -128,61 +122,91 @@ const forgetPasswordToDB = async (email: string) => {
 
   //save to DB
   const authentication = {
-    oneTimeCode: otp,
-    expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+    oneTimeCode: hashOtp(otp),
+    expireAt: new Date(Date.now() + OTP_TTL_MS),
   };
   await User.findOneAndUpdate({ email }, { $set: { authentication } });
+  await clearOtpAttempts(isExistUser._id.toString());
 };
 
 //verify email
 const verifyEmailToDB = async (payload: IVerifyEmail) => {
   const { email, oneTimeCode } = payload;
-  const isExistUser = await User.findOne({ email }).select('+authentication');
-  if (!isExistUser) {
+  const existingUser = await User.findOne({ email }).select('+authentication');
+  if (!existingUser) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
   }
 
   if (!oneTimeCode) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
-      'Please give the otp, check your email we send a code',
+      'Please provide the OTP, check your email we sent a code',
     );
   }
 
-  if (isExistUser.authentication?.oneTimeCode !== oneTimeCode) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'You provided wrong otp');
+  // check otp attempts limit
+  const authentication = existingUser.authentication;
+  const userId = existingUser._id.toString();
+  const attempts = await getOtpAttempts(userId);
+  if (attempts >= OTP_ATTEMPT_LIMIT) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, LOCKED_OTP_MESSAGE);
   }
 
+  // check otp matches
+  // if not matches -> record wrong otp attempt and throw error if limit reached
+  const storedCode = authentication?.oneTimeCode;
+  const codeMatches =
+    typeof storedCode === 'string' && otpMatches(oneTimeCode, storedCode);
+
+  if (!codeMatches) {
+    const attemptCount = await recordWrongOtp(userId);
+    const locked = attemptCount >= OTP_ATTEMPT_LIMIT;
+    if (locked) {
+      await User.updateOne(
+        { _id: existingUser._id },
+        { $set: { 'authentication.oneTimeCode': null } },
+      );
+    }
+
+    const attemptsLeft = OTP_ATTEMPT_LIMIT - attemptCount;
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      locked ? LOCKED_OTP_MESSAGE : `Wrong OTP, ${attemptsLeft} attempts left`,
+    );
+  }
+
+  // if otp matches -> check otp expiry and clear otp attempts
   const date = new Date();
-  if (date > isExistUser.authentication?.expireAt) {
+  if (!authentication?.expireAt || date > authentication.expireAt) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
       'Otp already expired, Please try again',
     );
   }
 
+  await clearOtpAttempts(userId);
+
   let message;
   let data;
 
-  if (!isExistUser.isEmailVerified) {
+  // if user is not email verified -> verify email and return access and refresh tokens
+  // else -> reset password and return reset token
+  if (!existingUser.isEmailVerified) {
     await User.findOneAndUpdate(
-      { _id: isExistUser._id },
+      { _id: existingUser._id },
       {
         isEmailVerified: true,
         authentication: { oneTimeCode: null, expireAt: null },
       },
     );
 
-    //create access token
     const accessToken = jwtHelper.createToken(
-      { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
+      { id: existingUser._id, role: existingUser.role, email: existingUser.email },
       config.jwt.jwt_secret as Secret,
       config.jwt.jwt_expire_in as string,
     );
-
-    // refresh token
     const refreshToken = jwtHelper.createToken(
-      { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
+      { id: existingUser._id, role: existingUser.role, email: existingUser.email },
       config.jwt.jwt_refresh_secret as Secret,
       config.jwt.jwt_refresh_expire_in as string,
     );
@@ -191,13 +215,13 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
     data = {
       accessToken,
       refreshToken,
-      role: isExistUser.role,
-      email: isExistUser.email,
-      _id: isExistUser._id,
+      role: existingUser.role,
+      email: existingUser.email,
+      _id: existingUser._id,
     };
   } else {
     await User.findOneAndUpdate(
-      { _id: isExistUser._id },
+      { _id: existingUser._id },
       {
         authentication: {
           isResetPassword: true,
@@ -207,10 +231,9 @@ const verifyEmailToDB = async (payload: IVerifyEmail) => {
       },
     );
 
-    //create token ;
     const resetToken = cryptoToken();
     await ResetToken.create({
-      user: isExistUser._id,
+      user: existingUser._id,
       token: resetToken,
       expireAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
     });

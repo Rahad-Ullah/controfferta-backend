@@ -32,15 +32,29 @@ const state = vi.hoisted(() => {
     }),
   };
   const rateHits = new Map<string, number>();
+  const redisStore = new Map<string, string>();
   const redisMock = {
-    get: vi.fn(function get() {
-      return Promise.resolve(null);
+    get: vi.fn(function get(key: string) {
+      return Promise.resolve(redisStore.get(String(key)) ?? null);
     }),
-    set: vi.fn(function set() {
+    set: vi.fn(function set(key: string, value: string) {
+      redisStore.set(String(key), String(value));
       return Promise.resolve('OK');
     }),
-    del: vi.fn(function del() {
+    incr: vi.fn(function incr(key: string) {
+      const next = Number(redisStore.get(String(key)) ?? 0) + 1;
+      redisStore.set(String(key), String(next));
+      return Promise.resolve(next);
+    }),
+    expire: vi.fn(function expire() {
       return Promise.resolve(1);
+    }),
+    del: vi.fn(function del(...keys: string[]) {
+      let removed = 0;
+      for (const key of keys) {
+        if (redisStore.delete(String(key))) removed += 1;
+      }
+      return Promise.resolve(removed);
     }),
     quit: vi.fn(function quit() {
       return Promise.resolve('OK');
@@ -75,6 +89,7 @@ const state = vi.hoisted(() => {
       return pipeline;
     }),
     rateHits,
+    redisStore,
   };
   const stripeMock = {
     checkout: {
@@ -301,8 +316,14 @@ beforeAll(async () => {
 
 afterEach(async () => {
   (
-    state.redisMock as { rateHits?: Map<string, number> }
+    state.redisMock as {
+      rateHits?: Map<string, number>;
+      redisStore?: Map<string, string>;
+    }
   ).rateHits?.clear();
+  (
+    state.redisMock as { redisStore?: Map<string, string> }
+  ).redisStore?.clear();
   const collections = mongoose.connection.collections;
   for (const key in collections) {
     await collections[key].deleteMany({});

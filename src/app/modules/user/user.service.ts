@@ -5,6 +5,7 @@ import { EmailQueue } from '../../../helpers/email.queue';
 import { emailTemplate } from '../../../shared/emailTemplate';
 import deleteS3File from '../../../shared/deleteS3File';
 import generateOTP from '../../../utils/generateOTP';
+import { hashOtp, OTP_TTL_MS } from '../../../utils/otp';
 import { IProviderProfileUpdate, IRegisterUser, IUser } from './user.interface';
 import { User } from './user.model';
 import { UserRole, UserStatus } from './user.constant';
@@ -85,8 +86,8 @@ const createUserToDB = async (payload: IRegisterUser) => {
       {
         $set: {
           authentication: {
-            oneTimeCode: otp,
-            expireAt: new Date(Date.now() + 5 * 60 * 1000),
+            oneTimeCode: hashOtp(otp),
+            expireAt: new Date(Date.now() + OTP_TTL_MS),
           },
         },
       },
