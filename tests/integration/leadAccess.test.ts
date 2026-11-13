@@ -155,7 +155,10 @@ describe('Lead access API', () => {
     expect(spent?.reference?.type).toBe(CreditLedgerReferenceType.LeadAccess);
     expect(spent?.reference?.id.toString()).toBe(accessId);
 
-    const feed = await request(app).get('/api/v1/leads');
+    const feed = await request(app)
+      .get('/api/v1/leads')
+      .set('Authorization', authHeader(providerToken));
+    expect(feed.status).toBe(200);
     expect(feed.body.data[0].client).toBeUndefined();
 
     const again = await request(app)

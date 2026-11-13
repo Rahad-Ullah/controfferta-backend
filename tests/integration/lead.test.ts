@@ -68,14 +68,12 @@ describe('Lead API', () => {
     const leadId = created.body.data._id;
 
     const noToken = await request(app).get('/api/v1/leads');
-    expect(noToken.status).toBe(200);
-    expect(noToken.body.data).toEqual([]);
+    expect(noToken.status).toBe(401);
 
     const clientFeed = await request(app)
       .get('/api/v1/leads')
       .set('Authorization', authHeader(clientToken));
-    expect(clientFeed.status).toBe(200);
-    expect(clientFeed.body.data).toEqual([]);
+    expect(clientFeed.status).toBe(403);
 
     const hiddenFeed = await request(app)
       .get('/api/v1/leads?searchTerm=Milano')
@@ -146,5 +144,39 @@ describe('Lead API', () => {
       .get('/api/v1/leads')
       .set('Authorization', authHeader(providerToken));
     expect(afterDelete.body.data).toEqual([]);
+  });
+
+  it('stops a public lead form after five submissions from the same address', async () => {
+    const category = await Category.create({
+      name: 'Heat pump',
+      description: 'Heating',
+      creditCost: 8,
+    });
+    const body = {
+      category: category._id.toString(),
+      title: 'Replace the boiler',
+      description: 'A house in Turin',
+      address: 'Via Po 4, Torino',
+      budgetRange: { minimum: 2000, maximum: 5000 },
+      timeline: 'This year',
+      client: {
+        name: 'Giulia Bianchi',
+        email: 'giulia@example.com',
+        phone: { countryCode: '+39', number: '3201234567' },
+        address: 'Via Po 4, Torino',
+      },
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const created = await request(app).post('/api/v1/leads/create').send(body);
+      expect(created.status).toBe(201);
+    }
+
+    const limited = await request(app).post('/api/v1/leads/create').send(body);
+    expect(limited.status).toBe(429);
+    expect(limited.body.message).toBe(
+      'Too many lead submissions. Please try again later.',
+    );
+    expect(await Lead.countDocuments()).toBe(5);
   });
 });
