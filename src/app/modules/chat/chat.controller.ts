@@ -20,7 +20,10 @@ const createChat = catchAsync(
 // delete chat
 const deleteChat = catchAsync(
   async (req: Request, res: Response) => {
-    const result = await ChatServices.deleteChatFromDB(req.params.id);
+    const result = await ChatServices.deleteChatFromDB(
+      req.params.id,
+      req.user.id,
+    );
 
     sendResponse(res, {
       success: true,

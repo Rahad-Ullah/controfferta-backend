@@ -5,19 +5,49 @@ import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
 import { Message } from '../message/message.model';
 import { IMessage } from '../message/message.interface';
+import { User } from '../user/user.model';
+import { UserRole, UserStatus } from '../user/user.constant';
+
+const canMessage = (left?: UserRole, right?: UserRole) => {
+  const roles = new Set([left, right]);
+  return roles.has(UserRole.Client) && roles.has(UserRole.Provider);
+};
 
 // ---------------- create chat ----------------
 const createChatIntoDB = async (user: JwtPayload, payload: IChat) => {
-  const participants = [...payload.participants];
-  // push the user id to participants if not already included
-  if (!participants.includes(user.id)) {
-    participants.push(user.id);
+  const otherIds = [
+    ...new Set(
+      payload.participants
+        .map(participant => participant.toString())
+        .filter(participant => participant !== user.id),
+    ),
+  ];
+  if (otherIds.length !== 1) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'A chat can only include one other participant',
+    );
   }
+
+  const [otherId] = otherIds;
+  const accounts = await User.find({
+    _id: { $in: [user.id, otherId] },
+  }).select('role status isDeleted');
+  const caller = accounts.find(account => account._id.toString() === user.id);
+  const other = accounts.find(account => account._id.toString() === otherId);
+  if (!other || other.isDeleted || other.status !== UserStatus.Active) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Participant not found');
+  }
+  if (!canMessage(caller?.role, other.role)) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'You cannot message this user');
+  }
+
+  const participants = [user.id, other._id];
 
   // create chat if it does not exist
   const isExist = await Chat.findOne({
-    participants: { $all: participants },
-    isDeleted: false
+    participants: { $all: participants, $size: 2 },
+    isDeleted: false,
   }).lean();
   if (isExist) {
     return isExist;
@@ -28,18 +58,25 @@ const createChatIntoDB = async (user: JwtPayload, payload: IChat) => {
 };
 
 // ---------------- delete chat ----------------
-const deleteChatFromDB = async (chatId: string) => {
-  const isExist = await Chat.exists({ _id: chatId });
-  if (!isExist) {
+const deleteChatFromDB = async (chatId: string, userId: string) => {
+  const chat = await Chat.findById(chatId);
+  if (!chat) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Chat not found!');
   }
 
-  const result = await Chat.findByIdAndUpdate(
-    chatId,
-    { isDeleted: true },
-    { new: true }
+  const isParticipant = chat.participants.some(
+    participant => participant.toString() === userId,
   );
-  return result;
+  if (!isParticipant) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'You are not a participant of this chat!',
+    );
+  }
+
+  chat.isDeleted = true;
+  await chat.save();
+  return chat;
 };
 
 // ---------------- get single chat by id ----------------
