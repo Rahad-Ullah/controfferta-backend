@@ -23,6 +23,7 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
     await stripeEventHandler(event);
   } catch (err) {
     console.error('Stripe webhook processing failed:', err);
+    return res.status(500).json({ received: false });
   }
 
   res.status(200).json({ received: true });

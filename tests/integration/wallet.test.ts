@@ -79,6 +79,7 @@ describe('Wallet API', () => {
       .send({ amount: 20 });
 
     expect(res.status).toBe(200);
+    expect(res.body.data.newBalance).toBe(5);
     expect(harness().stripeMock.transfers.create).toHaveBeenCalled();
 
     const txn = await Transaction.findOne({ user: user._id });
@@ -90,6 +91,6 @@ describe('Wallet API', () => {
       .get('/api/v1/wallets/my-wallet')
       .set('Authorization', authHeader(token));
     expect(mine.status).toBe(200);
-    expect(mine.body.data.availableBalance).toBe(25);
+    expect(mine.body.data.availableBalance).toBe(5);
   });
 });

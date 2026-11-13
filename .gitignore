@@ -3,11 +3,13 @@ dist
 
 # environment variables
 .env
+.env.local
 
 # local files
 /winston
 /uploads
 /coverage
+/local
 
 # code editor
 .vscode

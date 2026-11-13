@@ -9,12 +9,14 @@ import {
 import { stripe } from '../../../config/stripe';
 import {
   PayoutProvider,
-  SupportedCurrency,
 } from '../../modules/wallet/wallet.constants';
 import { Wallet } from '../../modules/wallet/wallet.model';
 import { CreditPaymentStatus } from '../../modules/creditPurchase/creditPurchase.constant';
 import { CreditPurchase } from '../../modules/creditPurchase/creditPurchase.model';
 import { StripeFulfillment } from './stripe.fulfillment';
+import ApiError from 'src/errors/ApiError';
+import { StatusCodes } from 'http-status-codes';
+import mongoose from 'mongoose';
 
 // ----------------- on checkout session completed -----------------
 const onCheckoutSessionCompleted = async (event: Stripe.Event) => {
@@ -491,13 +493,13 @@ const onAccountUpdated = async (event: Stripe.Event) => {
 const onTransferCreated = async (event: Stripe.Event) => {
   const { id, amount, metadata } = event.data.object as Stripe.Transfer;
 
-  const { userId, walletId, txnId } = metadata || {};
+  const { txnId } = metadata || {};
 
-  if (!walletId) {
-    console.error(
-      `[Stripe Webhook Error] Missing wallet metadata for transfer: ${id}`,
+  if (!txnId) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `[Stripe Webhook Error] Missing transaction ID in metadata for transfer: ${id}`,
     );
-    return;
   }
 
   // 1. Convert Stripe cents to platform USD float
@@ -510,90 +512,105 @@ const onTransferCreated = async (event: Stripe.Event) => {
         type: TransactionType.Payout,
         gateway: TransactionGateway.Stripe,
         gatewayReferenceId: txnId,
+        status: TransactionStatus.Pending,
       },
       {
-        user: userId,
         paymentMethod: 'stripe_connect',
-        amount: totalAmountUSD,
         gatewayFee: 0, // Platform transfers don't levy individual fees; those hit during payout/charge
         platformFeePercentage: 0,
         platformFee: 0,
         netAmount: totalAmountUSD,
-        currency: SupportedCurrency.Usd,
         status: TransactionStatus.Completed,
         isPaid: true,
         paidAt: new Date(),
       },
-      { upsert: true, new: true },
+      { new: true },
     );
 
     console.log(
-      `[Stripe Webhook Success] Connect Transfer logged: ${transaction._id}`,
-    );
-
-    // 3. Deduct the available balance now that the transfer cleared out of your platform
-    await Wallet.findByIdAndUpdate(walletId, {
-      $inc: {
-        availableBalance: -totalAmountUSD,
-      },
-    });
-
-    console.log(
-      `[Fulfillment Success] Wallet ${walletId} balance debited successfully.`,
+      `[Stripe Webhook Success] Connect Transfer logged: ${transaction?._id}`,
     );
   } catch (error: any) {
-    console.error(
-      `[Database Error] Failed to log Stripe Connect transfer for ${id}:`,
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      `[Stripe Webhook Error] Failed to log Stripe Connect transfer for ${id}:`,
       error.message,
     );
-    throw error;
   }
 };
 
+// ----------------- on transfer reversed -----------------
 const onTransferReversed = async (event: Stripe.Event) => {
-  const { id, amount, metadata } = event.data.object as Stripe.Transfer;
+  const { id, amount_reversed, metadata } = event.data.object as Stripe.Transfer;
 
   const { walletId, txnId } = metadata || {};
 
-  if (!walletId) {
-    console.error(
-      `[Stripe Webhook Error] Missing wallet metadata for reversal: ${id}`,
+  if (!txnId) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `[Stripe Webhook Error] Missing transaction ID in metadata for reversal: ${id}`,
     );
-    return;
   }
 
-  const reversedAmountUSD = amount / 100;
+  if (!walletId) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      `[Stripe Webhook Error] Missing wallet metadata for reversal: ${id}`,
+    );
+  }
 
+  const reversedAmountUSD = amount_reversed / 100;  // convert from cents to USD
+
+  const session = await mongoose.startSession();
   try {
-    // Mark the ledger item as failed/reversed
-    await Transaction.findOneAndUpdate(
+    session.startTransaction();
+
+    // 1. Update the transaction status to failed
+    const updatedTransaction = await Transaction.findOneAndUpdate(
       {
         type: TransactionType.Payout,
         gateway: TransactionGateway.Stripe,
         gatewayReferenceId: txnId,
+        status: { $in: [TransactionStatus.Pending, TransactionStatus.Completed] },
       },
-      {
-        status: TransactionStatus.Failed,
-        isPaid: false,
-      },
+      { status: TransactionStatus.Failed, isPaid: false },
+      { new: true, session },
     );
 
-    // Refund the money back into the host's wallet since the transfer bounced back
-    await Wallet.findByIdAndUpdate(walletId, {
-      $inc: {
-        availableBalance: reversedAmountUSD,
-      },
-    });
+    if (!updatedTransaction) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        `[Stripe Webhook Error] Failed to update transaction for reversal: ${txnId}. Please try again later.`,
+      );
+    }
+
+    // 2. Update the wallet available balance
+    const updatedWallet = await Wallet.findByIdAndUpdate(
+      walletId,
+      { $inc: { availableBalance: reversedAmountUSD } },
+      { new: true, session },
+    );
+    if (!updatedWallet) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        `[Stripe Webhook Error] Failed to update wallet for reversal: ${walletId}. Please try again later.`,
+      );
+    }
+
+    await session.commitTransaction();
 
     console.log(
-      `[Reversal Success] Wallet ${walletId} balance restored due to Stripe reversal.`,
+      `[Stripe Webhook Success] Connect Transfer reversed: ${txnId}`,
     );
   } catch (error: any) {
-    console.error(
-      `[Database Error] Failed to reverse Stripe transfer for ${id}:`,
+    if (session.inTransaction()) await session.abortTransaction();
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      `[Stripe Webhook Error] Failed to reverse Stripe transfer for ${id}:`,
       error.message,
     );
-    throw error;
+  } finally {
+    session.endSession();
   }
 };
 

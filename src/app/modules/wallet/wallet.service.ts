@@ -17,6 +17,7 @@ import {
 import { emailTemplate } from '../../../shared/emailTemplate';
 import { emailHelper } from '../../../helpers/emailHelper';
 import { logger } from '../../../shared/logger';
+import { walletServiceHelper } from './wallet.helper';
 
 // --------------- connect payout method service ---------------
 const connectPayoutMethodService = async (payload: IWallet) => {
@@ -105,20 +106,37 @@ const payoutMoneyService = async (userId: string, amountUSD: number) => {
     );
   }
 
+  // deduct wallet available balance
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    { _id: wallet._id, availableBalance: { $gte: amountUSD } },
+    { $inc: { availableBalance: -amountUSD } },
+    { new: true },
+  );
+  if (!updatedWallet) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Insufficient available balance. Please try again later.',
+    );
+  }
+
   // check gateway provider and payout
-  const txnId = `ZILA_PAYOUT-${wallet._id}-${Date.now()}`;
+  const txnId = `PAYOUT-${wallet._id}-${Date.now()}`;
   if (wallet.provider === PayoutProvider.Stripe) {
     // check stripe balance
     const balance = await stripe.balance.retrieve();
     const availableBalance = balance.available.find(
       item => item.currency === wallet.currency,
     );
-    if (availableBalance && availableBalance.amount < amountUSD) {
+    const stripeAvailableBalance = (availableBalance?.amount ?? 0) / 100; // convert cents to USD
+    if (stripeAvailableBalance < amountUSD) {
+      // revert wallet available balance
+      await walletServiceHelper.revertWalletAvailableBalance(wallet._id.toString(), amountUSD);
+
       // send notification to the admins
       const template = emailTemplate.lowBalanceWarning({
         adminEmail: config.super_admin.email as string,
         gatewayName: 'Stripe',
-        currentBalance: availableBalance.amount,
+        currentBalance: stripeAvailableBalance,
         requiredBalance: amountUSD,
         currency: SupportedCurrency.Usd,
       });
@@ -133,38 +151,53 @@ const payoutMoneyService = async (userId: string, amountUSD: number) => {
 
     const bankInfo = wallet.gatewayBankInfo?.[PayoutProvider.Stripe];
     if (!bankInfo) {
+      // revert wallet available balance
+      await walletServiceHelper.revertWalletAvailableBalance(wallet._id.toString(), amountUSD);
       throw new ApiError(
         StatusCodes.BAD_REQUEST,
-        'Stripe bank routing and account information is missing.',
+        'Stripe bank routing and account information is missing. Please connect your payout method.',
       );
     }
+
+    // create transaction
+    const transaction = await Transaction.create({
+      user: userId,
+      type: TransactionType.Payout,
+      amount: amountUSD,
+      reference: {
+        type: TransactionReferenceType.Wallet,
+        id: wallet._id,
+      },
+      gateway: wallet.provider,
+      gatewayReferenceId: txnId,
+    });
+    if (!transaction) {
+      // revert wallet available balance
+      await walletServiceHelper.revertWalletAvailableBalance(wallet._id.toString(), amountUSD);
+      throw new ApiError(
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        'Failed to create transaction. Please try again later.',
+      );
+    }
+
     try {
       await stripe.transfers.create({
-        amount: amountUSD,
-        currency: wallet.currency,
+        amount: amountUSD * 100, // convert USD to cents
+        currency: wallet.currency.toLowerCase(),
         destination: bankInfo.stripeAccountId,
         metadata: { txnId, userId, walletId: wallet._id.toString() },
       });
     } catch (error) {
+      // revert wallet available balance
+      await walletServiceHelper.revertWalletAvailableBalance(wallet._id.toString(), amountUSD);
+      // delete transaction
+      await Transaction.findByIdAndDelete(transaction._id);
       console.error('Error on Stripe payout: ', error);
-      throw new ApiError(StatusCodes.BAD_REQUEST, 'Stripe Payout failed');
+      throw new ApiError(StatusCodes.INTERNAL_SERVER_ERROR, 'Stripe Payout failed. Please try again later.');
     }
   }
 
-  // create transaction
-  const transaction = await Transaction.create({
-    user: userId,
-    type: TransactionType.Payout,
-    amount: amountUSD,
-    reference: {
-      type: TransactionReferenceType.Wallet,
-      id: wallet._id,
-    },
-    gateway: wallet.provider,
-    gatewayReferenceId: txnId,
-  });
-
-  return transaction;
+  return { newBalance: updatedWallet.availableBalance };
 };
 
 // --------------- get wallet by user id service ---------------
