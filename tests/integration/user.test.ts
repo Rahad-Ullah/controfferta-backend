@@ -221,4 +221,53 @@ describe('User API', () => {
     const stored = await User.findById(user._id);
     expect(stored?.isDeleted).toBe(true);
   });
+
+  it('stops an admin from changing a super admin or another admin', async () => {
+    const { token: adminToken } = await createTestUser({
+      email: 'admin@example.com',
+      role: UserRole.Admin,
+    });
+    const { user: otherAdmin } = await createTestUser({
+      email: 'other.admin@example.com',
+      role: UserRole.Admin,
+    });
+    const { user: superAdmin, token: superToken } = await createTestUser({
+      email: 'super@example.com',
+      role: UserRole.SuperAdmin,
+    });
+
+    const statusRes = await request(app)
+      .patch(`/api/v1/users/${superAdmin._id}/status`)
+      .set('Authorization', authHeader(adminToken))
+      .send({ status: UserStatus.Suspended });
+    expect(statusRes.status).toBe(403);
+    expect(statusRes.body.success).toBe(false);
+    expect(statusRes.body.message).toBe('You cannot change a super admin');
+
+    const deleted = await request(app)
+      .delete(`/api/v1/users/${superAdmin._id}`)
+      .set('Authorization', authHeader(adminToken));
+    expect(deleted.status).toBe(403);
+    expect(deleted.body.message).toBe('You cannot change a super admin');
+
+    const savedSuper = await User.findById(superAdmin._id);
+    expect(savedSuper?.status).toBe(UserStatus.Active);
+    expect(savedSuper?.isDeleted).toBe(false);
+
+    const adminStatus = await request(app)
+      .patch(`/api/v1/users/${otherAdmin._id}/status`)
+      .set('Authorization', authHeader(adminToken))
+      .send({ status: UserStatus.Suspended });
+    expect(adminStatus.status).toBe(403);
+    expect(adminStatus.body.message).toBe(
+      'Only a super admin can change an admin',
+    );
+
+    const superStatus = await request(app)
+      .patch(`/api/v1/users/${otherAdmin._id}/status`)
+      .set('Authorization', authHeader(superToken))
+      .send({ status: UserStatus.Suspended });
+    expect(superStatus.status).toBe(200);
+    expect(superStatus.body.data.status).toBe(UserStatus.Suspended);
+  });
 });

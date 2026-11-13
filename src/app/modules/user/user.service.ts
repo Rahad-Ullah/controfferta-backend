@@ -233,13 +233,39 @@ const updateProfileToDB = async (
   return result;
 };
 
+const assertCallerCanManageUser = (
+  caller: JwtPayload,
+  targetRole: UserRole,
+) => {
+  if (targetRole === UserRole.SuperAdmin) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'You cannot change a super admin',
+    );
+  }
+
+  if (targetRole === UserRole.Admin && caller.role !== UserRole.SuperAdmin) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'Only a super admin can change an admin',
+    );
+  }
+};
+
 // ------------ update user status ------------
 const updateStatusToDB = async (
   id: string,
   payload: { status: UserStatus },
+  caller: JwtPayload,
 ): Promise<Partial<IUser | null>> => {
-  const result = await User.findByIdAndUpdate(id, payload, { new: true });
+  const existingUser = await User.findById(id);
+  if (!existingUser) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!');
+  }
 
+  assertCallerCanManageUser(caller, existingUser.role);
+
+  const result = await User.findByIdAndUpdate(id, payload, { new: true });
   if (!result) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found!');
   }
@@ -259,7 +285,15 @@ const updateStatusToDB = async (
 // ------------ delete user ------------
 const deleteSingleUserFromDB = async (
   userId: string,
+  caller: JwtPayload,
 ): Promise<Partial<IUser>> => {
+  const existingUser = await User.findById(userId);
+  if (!existingUser) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
+  }
+
+  assertCallerCanManageUser(caller, existingUser.role);
+
   const result = await User.findByIdAndUpdate(
     userId,
     { isDeleted: true },

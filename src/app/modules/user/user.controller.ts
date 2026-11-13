@@ -52,7 +52,11 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
 
 // update user status
 const updateStatus = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.updateStatusToDB(req.params.id, req.body);
+  const result = await UserService.updateStatusToDB(
+    req.params.id,
+    req.body,
+    req.user,
+  );
 
   sendResponse(res, {
     success: true,
@@ -64,7 +68,10 @@ const updateStatus = catchAsync(async (req: Request, res: Response) => {
 
 // delete user
 const deleteSingleUser = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.deleteSingleUserFromDB(req.params.id);
+  const result = await UserService.deleteSingleUserFromDB(
+    req.params.id,
+    req.user,
+  );
 
   sendResponse(res, {
     success: true,
