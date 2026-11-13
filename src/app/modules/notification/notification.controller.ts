@@ -25,7 +25,10 @@ export const getMyNotifications = catchAsync(
 // read single notification by id
 export const readNotification = catchAsync(
   async (req: Request, res: Response) => {
-    const result = await NotificationServices.readNotification(req.params.id);
+    const result = await NotificationServices.readNotification(
+      req.params.id,
+      req.user.id,
+    );
 
     sendResponse(res, {
       success: true,

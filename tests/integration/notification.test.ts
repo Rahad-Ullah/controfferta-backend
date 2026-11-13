@@ -46,4 +46,31 @@ describe('Notification API', () => {
     });
     expect(unread).toBe(0);
   });
+
+  it('returns 404 when another user marks a notification read', async () => {
+    const { user } = await createTestUser();
+    const stranger = await createTestUser({ email: 'stranger@example.com' });
+    const note = await Notification.create({
+      type: NotificationType.AccountUpdated,
+      title: 'Private',
+      message: 'Only the owner can read this',
+      receiver: user._id,
+    });
+
+    const hidden = await request(app)
+      .patch(`/api/v1/notifications/read/${note._id}`)
+      .set('Authorization', authHeader(stranger.token));
+    expect(hidden.status).toBe(404);
+    expect(hidden.body.success).toBe(false);
+    expect(hidden.body.message).toBe('Notification not found');
+
+    const saved = await Notification.findById(note._id);
+    expect(saved?.isRead).toBe(false);
+
+    const missing = await request(app)
+      .patch('/api/v1/notifications/read/64b000000000000000000001')
+      .set('Authorization', authHeader(stranger.token));
+    expect(missing.status).toBe(404);
+    expect(missing.body.message).toBe('Notification not found');
+  });
 });

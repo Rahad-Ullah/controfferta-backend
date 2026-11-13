@@ -1,7 +1,9 @@
+import { StatusCodes } from 'http-status-codes';
+import { Types } from 'mongoose';
+import ApiError from '../../../errors/ApiError';
 import { timeAgo } from '../../../utils/timeAgo';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { Notification } from './notification.model';
-import { Types } from 'mongoose';
 
 // get notifications by user id
 const getNotificationsByUserId = async (
@@ -32,20 +34,16 @@ const getNotificationsByUserId = async (
 };
 
 // read single notification by id
-const readNotification = async (id: string) => {
-  // check if the notification exists
-  const existingNotification = await Notification.exists({ _id: id });
-  if (!existingNotification) {
-    throw new Error('Notification not found');
+const readNotification = async (id: string, userId: string) => {
+  const result = await Notification.findOneAndUpdate(
+    { _id: id, receiver: userId },
+    { isRead: true },
+    { new: true },
+  );
+  if (!result) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Notification not found');
   }
 
-  const result = await Notification.findByIdAndUpdate(
-    id,
-    { isRead: true },
-    {
-      new: true,
-    },
-  );
   return result;
 };
 
