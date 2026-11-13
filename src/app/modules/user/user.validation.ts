@@ -4,13 +4,13 @@ import { UserRole, UserStatus } from './user.constant';
 import { objectId } from '../../../shared/objectIdValidator';
 
 const accountFields = {
-  firstName: z.string({ required_error: 'First name is required' }),
-  lastName: z.string({ required_error: 'Last name is required' }),
+  firstName: z.string({ error: 'First name is required' }),
+  lastName: z.string({ error: 'Last name is required' }),
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ error: 'Email is required' })
     .email('Invalid email address'),
   password: z
-    .string({ required_error: 'Password is required' })
+    .string({ error: 'Password is required' })
     .min(8, 'Password must be at least 8 characters long'),
   phone: z
     .object({
@@ -22,7 +22,7 @@ const accountFields = {
 
 const providerFields = {
   businessName: z
-    .string({ required_error: 'Business name is required' })
+    .string({ error: 'Business name is required' })
     .trim()
     .min(1, 'Business name is required'),
   businessType: z.nativeEnum(BusinessType).optional(),
@@ -94,7 +94,7 @@ const updateStatusZodSchema = z.object({
   body: z
     .object({
       status: z.nativeEnum(UserStatus, {
-        required_error: 'Status is required',
+        error: 'Status is required',
       }),
     })
     .strict(),

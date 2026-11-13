@@ -15,11 +15,11 @@ const adjustCreditLedgerValidation = z.object({
     .object({
       provider: objectId('provider id'),
       amount: z
-        .number({ required_error: 'Amount is required' })
+        .number({ error: 'Amount is required' })
         .int('Amount must be a whole number')
         .refine(value => value !== 0, 'Amount cannot be zero'),
       note: z
-        .string({ required_error: 'Note is required' })
+        .string({ error: 'Note is required' })
         .trim()
         .min(1, 'Note is required'),
     })

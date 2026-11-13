@@ -5,17 +5,17 @@ import { BlogStatus } from './blog.constant';
 const imageUrl = z.union([z.string().url(), z.literal('')]).optional();
 
 const title = z
-  .string({ required_error: 'Title is required' })
+  .string({ error: 'Title is required' })
   .trim()
   .min(1, 'Title is required');
 
 const description = z
-  .string({ required_error: 'Description is required' })
+  .string({ error: 'Description is required' })
   .trim()
   .min(1, 'Description is required');
 
 const bodyContent = z
-  .string({ required_error: 'Body is required' })
+  .string({ error: 'Body is required' })
   .trim()
   .min(1, 'Body is required');
 
@@ -65,7 +65,7 @@ const updateBlogStatusValidation = z.object({
   body: z
     .object({
       status: z.nativeEnum(BlogStatus, {
-        required_error: 'Status is required',
+        error: 'Status is required',
       }),
     })
     .strict(),

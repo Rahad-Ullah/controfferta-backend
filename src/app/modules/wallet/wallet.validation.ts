@@ -5,7 +5,7 @@ export const connectPayoutMethod = z.object({
   body: z
     .object({
       currency: z.nativeEnum(SupportedCurrency, {
-        required_error: 'Currency is required',
+        error: 'Currency is required',
       }),
       gatewayBankInfo: z
         .object({
@@ -37,7 +37,7 @@ export const connectPayoutMethod = z.object({
 export const payoutWithdrawal = z.object({
   body: z.object({
     amount: z
-      .number({ required_error: 'Withdrawal amount is required' })
+      .number({ error: 'Withdrawal amount is required' })
       .int('Amount must be an integer.')
       .positive('Withdrawal amount must be greater than 0.'),
   }),

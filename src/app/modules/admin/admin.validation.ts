@@ -8,13 +8,13 @@ const createAdminZodSchema = z.object({
     .object({
       name: z.string().nonempty('Name is required'),
       email: z
-        .string({ required_error: 'Email is required' })
+        .string({ error: 'Email is required' })
         .email('Invalid email address'),
       password: z
-        .string({ required_error: 'Password is required' })
+        .string({ error: 'Password is required' })
         .min(8, 'Password must be at least 8 characters long'),
       phone: z.coerce
-        .string({ required_error: 'Phone is required' })
+        .string({ error: 'Phone is required' })
         .optional(),
       permissions: z.array(z.string()).optional(),
     })
@@ -28,7 +28,7 @@ const updateAdminZodSchema = z.object({
       name: z.string().nonempty('Name cannot be empty').optional(),
       email: z.string().email('Invalid email address').optional(),
       phone: z.coerce
-        .string({ required_error: 'Phone is required' })
+        .string({ error: 'Phone is required' })
         .min(10, 'Phone must be at least 10 characters long')
         .max(15, 'Phone must be at most 15 characters long')
         .optional(),

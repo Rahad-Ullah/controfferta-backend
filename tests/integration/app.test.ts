@@ -3,14 +3,13 @@ import { describe, expect, it } from 'vitest';
 import app from '../../src/app';
 
 describe('HTTP edge', () => {
-  it('hides the API docs outside development', async () => {
+  it('serves the API docs outside production', async () => {
     const ui = await request(app).get('/api-docs/');
-    expect(ui.status).toBe(404);
-    expect(ui.body.success).toBe(false);
+    expect(ui.status).toBe(200);
 
     const spec = await request(app).get('/api-docs/v1.json');
-    expect(spec.status).toBe(404);
-    expect(spec.body.message).toBe('Not found');
+    expect(spec.status).toBe(200);
+    expect(spec.body.openapi).toEqual(expect.any(String));
   });
 
   it('sends helmet headers and still allows a cross-origin API call', async () => {

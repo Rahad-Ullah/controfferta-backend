@@ -1,5 +1,5 @@
 import { registry } from '../api-docs/openapi';
-import { AnyZodObject, ZodType } from 'zod';
+import { ZodObject, ZodType } from 'zod';
 
 interface RegisterRouteOptions {
   method: 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -7,9 +7,9 @@ interface RegisterRouteOptions {
   tags?: string[];
   summary: string;
   body?: ZodType<any>;
-  query?: AnyZodObject;
-  params?: AnyZodObject;
-  headers?: AnyZodObject;
+  query?: ZodObject;
+  params?: ZodObject;
+  headers?: ZodObject;
   isAuth?: boolean;
   successDescription?: string;
 }

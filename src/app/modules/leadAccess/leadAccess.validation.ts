@@ -26,7 +26,7 @@ const updateLeadAccessStatusValidation = z.object({
   body: z
     .object({
       status: z.nativeEnum(LeadAccessStatus, {
-        required_error: 'Status is required',
+        error: 'Status is required',
       }),
     })
     .strict(),

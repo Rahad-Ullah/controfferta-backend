@@ -3,27 +3,27 @@ import { objectId } from '../../../shared/objectIdValidator';
 import { SupportPriority, SupportStatus } from './support.constants';
 
 const firstName = z
-  .string({ required_error: 'First name is required' })
+  .string({ error: 'First name is required' })
   .trim()
   .min(1, 'First name is required');
 
 const lastName = z
-  .string({ required_error: 'Last name is required' })
+  .string({ error: 'Last name is required' })
   .trim()
   .min(1, 'Last name is required');
 
 const email = z
-  .string({ required_error: 'Email is required' })
+  .string({ error: 'Email is required' })
   .trim()
   .email('Invalid email address');
 
 const subject = z
-  .string({ required_error: 'Subject is required' })
+  .string({ error: 'Subject is required' })
   .trim()
   .min(1, 'Subject is required');
 
 const message = z
-  .string({ required_error: 'Message is required' })
+  .string({ error: 'Message is required' })
   .trim()
   .min(1, 'Message is required');
 

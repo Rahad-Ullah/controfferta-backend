@@ -10,13 +10,13 @@ const listQuery = {
 };
 
 const rating = z
-  .number({ required_error: 'Rating is required' })
+  .number({ error: 'Rating is required' })
   .int('Rating must be a whole number')
   .min(1, 'Rating must be at least 1')
   .max(5, 'Rating must be at most 5');
 
 const message = z
-  .string({ required_error: 'Message is required' })
+  .string({ error: 'Message is required' })
   .trim()
   .min(1, 'Message is required');
 
@@ -38,7 +38,7 @@ const updatePlatformReviewStatusValidation = z.object({
   body: z
     .object({
       status: z.nativeEnum(PlatformReviewStatus, {
-        required_error: 'Status is required',
+        error: 'Status is required',
       }),
     })
     .strict(),

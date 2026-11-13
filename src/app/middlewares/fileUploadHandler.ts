@@ -43,6 +43,47 @@ const uploadToS3 = async (
   return `${config.media_server_url}/${s3Key}`;
 };
 
+const startsWith = (buffer: Buffer, bytes: number[]) =>
+  buffer.length >= bytes.length &&
+  bytes.every((byte, index) => buffer[index] === byte);
+
+const fileBrand = (buffer: Buffer) => {
+  if (buffer.length < 12 || buffer.toString('ascii', 4, 8) !== 'ftyp') {
+    return '';
+  }
+
+  return buffer.toString('ascii', 8, 12);
+};
+
+const detectContentType = (buffer: Buffer) => {
+  if (startsWith(buffer, [0xff, 0xd8, 0xff])) return 'image/jpeg';
+  if (
+    startsWith(buffer, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  ) {
+    return 'image/png';
+  }
+  if (buffer.length >= 5 && buffer.toString('ascii', 0, 5) === '%PDF-') {
+    return 'application/pdf';
+  }
+  if (
+    buffer.toString('ascii', 0, 3) === 'ID3' ||
+    (buffer.length >= 2 && buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0)
+  ) {
+    return 'audio/mpeg';
+  }
+
+  const brand = fileBrand(buffer);
+  if (['heic', 'heix', 'hevc', 'hevx', 'heif'].includes(brand)) {
+    return 'image/heic';
+  }
+  if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
+  if (['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'dash'].includes(brand)) {
+    return 'video/mp4';
+  }
+
+  return null;
+};
+
 const fileUploadHandler = (): RequestHandler => {
   // 2. Use Memory Storage instead of Disk Storage
   const storage = multer.memoryStorage();
@@ -168,9 +209,33 @@ const fileUploadHandler = (): RequestHandler => {
 
         if (filesMap) {
           const uploadPromises: Promise<void>[] = [];
+          const allowedByField: Record<string, Set<string>> = {
+            image: ALLOWED_IMAGE_TYPES,
+            media: ALLOWED_MEDIA_TYPES,
+            doc: ALLOWED_DOC_TYPES,
+          };
+          const rejectionByField: Record<string, string> = {
+            image:
+              'Only .jpeg, .png, .jpg, .heic, and .heics files are supported!',
+            media: 'Only .mp4 and .mp3 files are supported!',
+            doc: 'Only .pdf files are supported!',
+          };
 
           for (const fieldname in filesMap) {
             const files = filesMap[fieldname];
+            const allowed = allowedByField[fieldname];
+
+            for (const file of files) {
+              const detected = detectContentType(file.buffer);
+              if (!detected || !allowed?.has(detected)) {
+                throw new ApiError(
+                  StatusCodes.BAD_REQUEST,
+                  rejectionByField[fieldname] ||
+                    `The field '${fieldname}' is not a recognized file upload field!`,
+                );
+              }
+              file.mimetype = detected;
+            }
 
             files.forEach(file => {
               const promise = uploadToS3(file, fieldname).then(s3Url => {
@@ -185,6 +250,10 @@ const fileUploadHandler = (): RequestHandler => {
           await Promise.all(uploadPromises);
         }
       } catch (s3Err: any) {
+        if (s3Err instanceof ApiError) {
+          return next(s3Err);
+        }
+
         return next(
           new ApiError(
             StatusCodes.INTERNAL_SERVER_ERROR,

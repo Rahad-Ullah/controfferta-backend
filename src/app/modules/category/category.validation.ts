@@ -4,7 +4,7 @@ import { objectId } from '../../../shared/objectIdValidator';
 const iconUrl = z.union([z.string().url(), z.literal('')]).optional();
 
 const creditCost = z
-  .number({ required_error: 'Credit cost is required' })
+  .number({ error: 'Credit cost is required' })
   .int('Credit cost must be a whole number')
   .nonnegative('Credit cost cannot be negative');
 
@@ -12,11 +12,11 @@ const createCategoryValidation = z.object({
   body: z
     .object({
       name: z
-        .string({ required_error: 'Name is required' })
+        .string({ error: 'Name is required' })
         .trim()
         .min(1, 'Name is required'),
       description: z
-        .string({ required_error: 'Description is required' })
+        .string({ error: 'Description is required' })
         .trim()
         .min(1, 'Description is required'),
       iconUrl,

@@ -60,7 +60,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.0.0",
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-s3": "^3.1092.0",
     "@elastic/elasticsearch": "8",
     "axios": "^1.18.1",
@@ -87,7 +87,7 @@
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.13.0",
     "winston-daily-rotate-file": "^5.0.0",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "config": {
     "commitizen": {

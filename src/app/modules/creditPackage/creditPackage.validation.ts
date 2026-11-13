@@ -7,22 +7,22 @@ import {
 } from './creditPackage.constant';
 
 const name = z
-  .string({ required_error: 'Name is required' })
+  .string({ error: 'Name is required' })
   .trim()
   .min(1, 'Name is required');
 
 const description = z
-  .string({ required_error: 'Description is required' })
+  .string({ error: 'Description is required' })
   .trim()
   .min(1, 'Description is required');
 
 const creditsAmount = z
-  .number({ required_error: 'Credits are required' })
+  .number({ error: 'Credits are required' })
   .int('Credits must be a whole number')
   .positive('Credits must be at least 1');
 
 const price = z
-  .number({ required_error: 'Price is required' })
+  .number({ error: 'Price is required' })
   .int('Price must be a whole number of euros')
   .min(MINIMUM_PACKAGE_PRICE, 'Price must be at least 1 euro');
 

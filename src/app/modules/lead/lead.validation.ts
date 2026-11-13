@@ -55,15 +55,15 @@ const createLeadValidation = z.object({
     .object({
       category: objectId('category'),
       title: z
-        .string({ required_error: 'Title is required' })
+        .string({ error: 'Title is required' })
         .trim()
         .min(1, 'Title is required'),
       description: z
-        .string({ required_error: 'Description is required' })
+        .string({ error: 'Description is required' })
         .trim()
         .min(1, 'Description is required'),
       address: z
-        .string({ required_error: 'Address is required' })
+        .string({ error: 'Address is required' })
         .trim()
         .min(1, 'Address is required'),
       location: z
@@ -77,38 +77,38 @@ const createLeadValidation = z.object({
         .optional(),
       budgetRange: z
         .object({
-          minimum: z.number({ required_error: 'Minimum budget is required' }),
-          maximum: z.number({ required_error: 'Maximum budget is required' }),
+          minimum: z.number({ error: 'Minimum budget is required' }),
+          maximum: z.number({ error: 'Maximum budget is required' }),
         })
         .refine(range => range.minimum <= range.maximum, {
           message: 'Minimum budget cannot be greater than the maximum',
           path: ['minimum'],
         }),
       timeline: z
-        .string({ required_error: 'Timeline is required' })
+        .string({ error: 'Timeline is required' })
         .trim()
         .min(1, 'Timeline is required'),
       client: z.object({
         name: z
-          .string({ required_error: 'Client name is required' })
+          .string({ error: 'Client name is required' })
           .trim()
           .min(1, 'Client name is required'),
         email: z
-          .string({ required_error: 'Client email is required' })
+          .string({ error: 'Client email is required' })
           .email('Invalid email address'),
         phone: z.object({
           countryCode: z
-            .string({ required_error: 'Country code is required' })
+            .string({ error: 'Country code is required' })
             .trim()
             .min(1)
             .max(5),
           number: z
-            .string({ required_error: 'Phone number is required' })
+            .string({ error: 'Phone number is required' })
             .trim()
             .min(1, 'Phone number is required'),
         }),
         address: z
-          .string({ required_error: 'Client address is required' })
+          .string({ error: 'Client address is required' })
           .trim()
           .min(1, 'Client address is required'),
       }),
@@ -125,7 +125,7 @@ const updateLeadStatusValidation = z.object({
   body: z
     .object({
       status: z.nativeEnum(LeadStatus, {
-        required_error: 'Status is required',
+        error: 'Status is required',
       }),
     })
     .strict(),
