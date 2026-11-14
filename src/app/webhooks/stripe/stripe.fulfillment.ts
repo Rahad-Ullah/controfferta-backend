@@ -136,6 +136,7 @@ const refundCreditPurchase = async (purchaseId: string) => {
       providerId: purchase.provider.toString(),
       type: CreditLedgerType.Refund,
       amount: -purchase.creditsAmount,
+      allowPartial: true,
       reference: {
         type: CreditLedgerReferenceType.CreditPurchase,
         id: purchase._id.toString(),

@@ -22,6 +22,7 @@ const checkoutEvent = (
   type: string,
   purchaseId: string,
   userId: string,
+  paymentIntent = 'pi_test_mock123',
 ) => ({
   id,
   type,
@@ -30,7 +31,7 @@ const checkoutEvent = (
       id: 'cs_test_mock123',
       payment_status: type === 'checkout.session.completed' ? 'paid' : 'unpaid',
       currency: 'eur',
-      payment_intent: 'pi_test_mock123',
+      payment_intent: paymentIntent,
       metadata: {
         userId,
         referenceType: 'credit_purchase',
@@ -356,23 +357,6 @@ describe('Credit purchase API', () => {
     );
     expect(paid.status).toBe(200);
 
-    await Provider.updateOne({ _id: provider._id }, { creditBalance: 10 });
-    const spent = await sendWebhook({
-      id: 'evt_credit_refund_spent',
-      type: 'charge.refunded',
-      data: {
-        object: {
-          id: 'ch_test_mock123',
-          payment_intent: 'pi_test_mock123',
-          metadata: {},
-        },
-      },
-    });
-    expect(spent.status).toBe(500);
-    const stillPaid = await Provider.findById(provider._id);
-    expect(stillPaid?.creditBalance).toBe(10);
-
-    await Provider.updateOne({ _id: provider._id }, { creditBalance: 100 });
     const refunded = await sendWebhook({
       id: 'evt_credit_refund_1',
       type: 'charge.refunded',
@@ -414,9 +398,79 @@ describe('Credit purchase API', () => {
       type: CreditLedgerType.Refund,
       amount: -100,
       balanceAfter: 0,
+      note: '',
     });
 
     const sold = await request(app).get(`/api/v1/credit-packages/${packageId}`);
     expect(sold.body.data.purchaseCount).toBe(0);
+
+    const startedAgain = await request(app)
+      .post('/api/v1/credit-purchases/create')
+      .set('Authorization', authHeader(providerToken))
+      .send({ package: packageId });
+    expect(startedAgain.status).toBe(201);
+    const secondId = startedAgain.body.data.purchase._id;
+
+    const paidAgain = await sendWebhook(
+      checkoutEvent(
+        'evt_credit_refund_paid_2',
+        'checkout.session.completed',
+        secondId,
+        user._id.toString(),
+        'pi_partial',
+      ),
+    );
+    expect(paidAgain.status).toBe(200);
+
+    await Provider.updateOne({ _id: provider._id }, { creditBalance: 10 });
+    const spent = await sendWebhook({
+      id: 'evt_credit_refund_spent',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_partial',
+          payment_intent: 'pi_partial',
+          metadata: {},
+        },
+      },
+    });
+    expect(spent.status).toBe(200);
+
+    const spentAgain = await sendWebhook({
+      id: 'evt_credit_refund_spent_2',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_partial',
+          payment_intent: 'pi_partial',
+          metadata: {},
+        },
+      },
+    });
+    expect(spentAgain.status).toBe(200);
+
+    const afterSpent = await Provider.findById(provider._id);
+    expect(afterSpent?.creditBalance).toBe(0);
+    const partial = await CreditLedger.findOne({
+      provider: provider._id,
+      type: CreditLedgerType.Refund,
+      'reference.id': secondId,
+    });
+    expect(partial).toMatchObject({
+      amount: -10,
+      balanceAfter: 0,
+      note: 'Uncollected credits: 90',
+    });
+
+    const spentView = await request(app)
+      .get(`/api/v1/credit-purchases/${secondId}`)
+      .set('Authorization', authHeader(adminToken));
+    expect(spentView.body.data.paymentStatus).toBe(
+      CreditPaymentStatus.Refunded,
+    );
+    const afterSpentCount = await request(app).get(
+      `/api/v1/credit-packages/${packageId}`,
+    );
+    expect(afterSpentCount.body.data.purchaseCount).toBe(0);
   });
 });

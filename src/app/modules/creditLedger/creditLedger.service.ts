@@ -28,6 +28,7 @@ type PostCreditLedgerInput = {
   note?: string;
   createdBy?: string;
   session: ClientSession;
+  allowPartial?: boolean;
 };
 
 const isStaff = (role: string) =>
@@ -49,6 +50,35 @@ const findProvider = async (userId: string) => {
 
 // ---------------- post credit ledger ----------------
 // the balance and this row share the caller's transaction
+const takeAvailableCredits = async (
+  providerId: string,
+  wanted: number,
+  session: ClientSession,
+) => {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const current = await Provider.findById(providerId).session(session);
+    if (!current) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Provider profile not found');
+    }
+
+    const clawback = Math.min(current.creditBalance, wanted);
+    const updated = await Provider.findOneAndUpdate(
+      { _id: providerId, creditBalance: current.creditBalance },
+      { $inc: { creditBalance: -clawback } },
+      { new: true, session },
+    );
+    if (!updated) continue;
+
+    return {
+      applied: -clawback,
+      balanceAfter: updated.creditBalance,
+      uncollected: wanted - clawback,
+    };
+  }
+
+  throw new ApiError(StatusCodes.BAD_REQUEST, 'Not enough credits');
+};
+
 const postCreditLedger = async ({
   providerId,
   type,
@@ -57,28 +87,48 @@ const postCreditLedger = async ({
   note,
   createdBy,
   session,
+  allowPartial = false,
 }: PostCreditLedgerInput) => {
-  const provider = await Provider.findOneAndUpdate(
-    amount < 0
-      ? { _id: providerId, creditBalance: { $gte: Math.abs(amount) } }
-      : { _id: providerId },
-    { $inc: { creditBalance: amount } },
-    { new: true, session },
-  );
+  let appliedAmount = amount;
+  let balanceAfter: number;
 
-  if (!provider) {
-    const exists = await Provider.exists({ _id: providerId }).session(session);
-    if (!exists) {
-      throw new ApiError(StatusCodes.NOT_FOUND, 'Provider profile not found');
+  if (amount < 0 && allowPartial) {
+    const taken = await takeAvailableCredits(
+      providerId,
+      Math.abs(amount),
+      session,
+    );
+    appliedAmount = taken.applied;
+    balanceAfter = taken.balanceAfter;
+    if (taken.uncollected > 0) {
+      note = `Uncollected credits: ${taken.uncollected}`;
     }
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Not enough credits');
+  } else {
+    const provider = await Provider.findOneAndUpdate(
+      amount < 0
+        ? { _id: providerId, creditBalance: { $gte: Math.abs(amount) } }
+        : { _id: providerId },
+      { $inc: { creditBalance: amount } },
+      { new: true, session },
+    );
+
+    if (!provider) {
+      const exists = await Provider.exists({ _id: providerId }).session(
+        session,
+      );
+      if (!exists) {
+        throw new ApiError(StatusCodes.NOT_FOUND, 'Provider profile not found');
+      }
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Not enough credits');
+    }
+    balanceAfter = provider.creditBalance;
   }
 
   const entry = new CreditLedger({
     provider: providerId,
     type,
-    amount,
-    balanceAfter: provider.creditBalance,
+    amount: appliedAmount,
+    balanceAfter,
     ...(reference ? { reference } : {}),
     note: note ?? '',
     ...(createdBy ? { createdBy } : {}),
