@@ -30,6 +30,25 @@ import { AuthSession, SessionClient } from './auth.session';
 
 const LOCKED_OTP_MESSAGE = 'Too many incorrect codes. Request a new one.';
 
+const wrongOtpMessage = (attemptsLeft: number) =>
+  `Wrong OTP, ${attemptsLeft} attempts left`;
+
+const failOtpAttempt = async (attemptKey: string): Promise<never> => {
+  const attempts = await getOtpAttempts(attemptKey);
+  if (attempts >= OTP_ATTEMPT_LIMIT) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, LOCKED_OTP_MESSAGE);
+  }
+
+  const attemptCount = await recordWrongOtp(attemptKey);
+  const locked = attemptCount >= OTP_ATTEMPT_LIMIT;
+  throw new ApiError(
+    StatusCodes.BAD_REQUEST,
+    locked
+      ? LOCKED_OTP_MESSAGE
+      : wrongOtpMessage(OTP_ATTEMPT_LIMIT - attemptCount),
+  );
+};
+
 const issueSessionTokens = async (
   user: { _id: unknown; role: string; email: string },
   client: SessionClient,
@@ -148,16 +167,17 @@ const verifyEmailToDB = async (
   client: SessionClient,
 ) => {
   const { email, oneTimeCode } = payload;
-  const existingUser = await User.findOne({ email }).select('+authentication');
-  if (!existingUser) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
-  }
-
   if (!oneTimeCode) {
     throw new ApiError(
       StatusCodes.BAD_REQUEST,
       'Please provide the OTP, check your email we sent a code',
     );
+  }
+
+  const existingUser = await User.findOne({ email }).select('+authentication');
+  if (!existingUser) {
+    otpMatches(oneTimeCode, hashOtp(0));
+    return failOtpAttempt(`email:${email.trim().toLowerCase()}`);
   }
 
   // check otp attempts limit
@@ -175,20 +195,14 @@ const verifyEmailToDB = async (
     typeof storedCode === 'string' && otpMatches(oneTimeCode, storedCode);
 
   if (!codeMatches) {
-    const attemptCount = await recordWrongOtp(userId);
-    const locked = attemptCount >= OTP_ATTEMPT_LIMIT;
-    if (locked) {
+    const attempts = await getOtpAttempts(userId);
+    if (attempts + 1 >= OTP_ATTEMPT_LIMIT) {
       await User.updateOne(
         { _id: existingUser._id },
         { $set: { 'authentication.oneTimeCode': null } },
       );
     }
-
-    const attemptsLeft = OTP_ATTEMPT_LIMIT - attemptCount;
-    throw new ApiError(
-      StatusCodes.BAD_REQUEST,
-      locked ? LOCKED_OTP_MESSAGE : `Wrong OTP, ${attemptsLeft} attempts left`,
-    );
+    await failOtpAttempt(userId);
   }
 
   // if otp matches -> check otp expiry and clear otp attempts
@@ -298,6 +312,7 @@ const resetPasswordToDB = async (
   await User.findOneAndUpdate({ _id: isExistToken.user }, updateData, {
     new: true,
   });
+  await AuthSession.revokeAllLoginSessions(String(isExistToken.user));
 };
 
 const changePasswordToDB = async (
@@ -343,6 +358,7 @@ const changePasswordToDB = async (
     password: hashPassword,
   };
   await User.findOneAndUpdate({ _id: user.id }, updateData, { new: true });
+  await AuthSession.revokeAllLoginSessions(String(user.id));
 };
 
 // refresh token

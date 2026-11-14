@@ -123,11 +123,8 @@ describe('Auth API', () => {
   });
 
   describe('POST /api/v1/auth/change-password', () => {
-    let userToken: string;
-
     beforeEach(async () => {
-      const created = await createTestUser();
-      userToken = created.token;
+      await createTestUser();
     });
 
     it('returns 401 when the request has no token', async () => {
@@ -142,9 +139,14 @@ describe('Auth API', () => {
     });
 
     it('changes the password and accepts the new one on login', async () => {
+      const existing = await request(app).post('/api/v1/auth/login').send({
+        email: testUserData.email,
+        password: 'Password123!',
+      });
+
       const res = await request(app)
         .post('/api/v1/auth/change-password')
-        .set('Authorization', authHeader(userToken))
+        .set('Authorization', authHeader(existing.body.data.accessToken))
         .send({
           currentPassword: 'Password123!',
           newPassword: 'NewPassword456!',
@@ -156,6 +158,16 @@ describe('Auth API', () => {
       expect(res.body.message).toBe(
         'Your password has been successfully changed',
       );
+
+      const oldRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: existing.body.data.refreshToken });
+      expect(oldRefresh.status).toBe(401);
+
+      const accessStillWorks = await request(app)
+        .get('/api/v1/users/me')
+        .set('Authorization', authHeader(existing.body.data.accessToken));
+      expect(accessStillWorks.status).toBe(200);
 
       const loginRes = await request(app).post('/api/v1/auth/login').send({
         email: testUserData.email,
@@ -219,6 +231,10 @@ describe('Auth API', () => {
 
     it('resets the password with a valid reset token', async () => {
       const { user } = await createTestUser();
+      const existing = await request(app).post('/api/v1/auth/login').send({
+        email: user.email,
+        password: 'Password123!',
+      });
       await User.findByIdAndUpdate(user._id, {
         authentication: { isResetPassword: true },
       });
@@ -240,6 +256,11 @@ describe('Auth API', () => {
       expect(res.body.message).toBe(
         'Your password has been successfully reset.',
       );
+
+      const oldRefresh = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .send({ refreshToken: existing.body.data.refreshToken });
+      expect(oldRefresh.status).toBe(401);
 
       const loginRes = await request(app).post('/api/v1/auth/login').send({
         email: user.email,
@@ -281,6 +302,35 @@ describe('Auth API', () => {
       expect(suspended.status).toBe(200);
       expect(suspended.body.message).toBe(sent);
       expect(harness().queueAddSpy).not.toHaveBeenCalled();
+    });
+
+    it('uses the wrong-code message when the email is unknown', async () => {
+      const first = await request(app).post('/api/v1/auth/verify-email').send({
+        email: 'nobody@example.com',
+        oneTimeCode: 123456,
+      });
+      expect(first.status).toBe(400);
+      expect(first.body.success).toBe(false);
+      expect(first.body.message).toBe('Wrong OTP, 4 attempts left');
+
+      for (let attempt = 2; attempt <= 4; attempt += 1) {
+        const wrong = await request(app)
+          .post('/api/v1/auth/verify-email')
+          .send({ email: 'nobody@example.com', oneTimeCode: 123456 });
+        expect(wrong.status).toBe(400);
+        expect(wrong.body.message).toBe(
+          `Wrong OTP, ${5 - attempt} attempts left`,
+        );
+      }
+
+      const locked = await request(app).post('/api/v1/auth/verify-email').send({
+        email: 'nobody@example.com',
+        oneTimeCode: 123456,
+      });
+      expect(locked.status).toBe(400);
+      expect(locked.body.message).toBe(
+        'Too many incorrect codes. Request a new one.',
+      );
     });
 
     it('locks the code after five wrong attempts', async () => {
