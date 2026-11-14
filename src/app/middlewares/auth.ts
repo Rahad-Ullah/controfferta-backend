@@ -4,39 +4,40 @@ import { Secret } from 'jsonwebtoken';
 import config from '../../config';
 import ApiError from '../../errors/ApiError';
 import { jwtHelper } from '../../helpers/jwtHelper';
+import { AUTH_COOKIE } from '../modules/auth/auth.cookies';
+
+const bearerToken = (header?: string) => {
+  if (!header?.startsWith('Bearer')) return '';
+  return header.split(' ')[1] || '';
+};
 
 const auth =
   (...roles: string[]) =>
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const tokenWithBearer = req.headers.authorization;
-      if (!tokenWithBearer) {
+      const fromHeader = bearerToken(req.headers.authorization);
+      const cookieToken = req.cookies?.[AUTH_COOKIE.access];
+      const fromCookie = typeof cookieToken === 'string' ? cookieToken : '';
+      const token = fromHeader || fromCookie;
+
+      if (!token) {
         throw new ApiError(StatusCodes.UNAUTHORIZED, 'You are not authorized');
       }
 
-      if (tokenWithBearer.startsWith('Bearer')) {
-        const token = tokenWithBearer.split(' ')[1];
+      const verifyUser = jwtHelper.verifyToken(
+        token,
+        config.jwt.jwt_secret as Secret,
+      );
+      req.user = verifyUser;
 
-        //verify token
-        const verifyUser = jwtHelper.verifyToken(
-          token,
-          config.jwt.jwt_secret as Secret
+      if (roles.length && !roles.includes(verifyUser.role)) {
+        throw new ApiError(
+          StatusCodes.FORBIDDEN,
+          "You don't have permission to access this api",
         );
-        //set user to header
-        req.user = verifyUser;
-
-        //guard user
-        if (roles.length && !roles.includes(verifyUser.role)) {
-          throw new ApiError(
-            StatusCodes.FORBIDDEN,
-            "You don't have permission to access this api"
-          );
-        }
-
-        next();
-      } else {
-        throw new ApiError(StatusCodes.UNAUTHORIZED, 'You are not authorized');
       }
+
+      next();
     } catch (error) {
       next(error);
     }

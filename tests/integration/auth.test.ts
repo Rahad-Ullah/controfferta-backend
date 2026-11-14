@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import app from '../../src/app';
+import config from '../../src/config';
 import { User } from '../../src/app/modules/user/user.model';
 import { UserRole, UserStatus } from '../../src/app/modules/user/user.constant';
 import { ResetToken } from '../../src/app/modules/resetToken/resetToken.model';
@@ -13,6 +14,18 @@ import { createTestUser } from '../helpers/user.helper';
 import { redis } from '../../src/config/redis';
 import { initEmailWorker } from '../../src/helpers/email.worker';
 import { harness } from '../harness';
+
+// Superagent types this header as a string. Multiple Set-Cookie values arrive as an array.
+const cookieHeader = (headers: { [name: string]: string }): string[] => {
+  const value: unknown = headers['set-cookie'];
+  if (Array.isArray(value)) {
+    return value.filter(
+      (cookie): cookie is string => typeof cookie === 'string',
+    );
+  }
+  if (typeof value === 'string' && value) return [value];
+  return [];
+};
 
 describe('Auth API', () => {
   const testUserData = {
@@ -115,10 +128,155 @@ describe('Auth API', () => {
       expect(res.body.message).toBe('User logged in successfully.');
       expect(res.body.data).toMatchObject({
         role: UserRole.Client,
-        email: testUserData.email,
       });
       expect(res.body.data).toHaveProperty('accessToken');
       expect(res.body.data).toHaveProperty('refreshToken');
+      expect(res.body.data.email).toBeUndefined();
+      expect(res.body.data.user).toBeUndefined();
+      expect(res.headers['set-cookie']).toBeUndefined();
+    });
+  });
+
+  describe('browser login cookies', () => {
+    const browserHeaders = () => ({
+      Origin: config.frontend_url as string,
+      'Sec-Fetch-Site': 'same-site',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Dest': 'empty',
+    });
+
+    beforeEach(async () => {
+      await User.create(testUserData);
+    });
+
+    it('sets HttpOnly cookies and returns the user without tokens', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set(browserHeaders())
+        .send({
+          email: testUserData.email,
+          password: testUserData.password,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.accessToken).toBeUndefined();
+      expect(res.body.data.refreshToken).toBeUndefined();
+      expect(res.body.data.email).toBeUndefined();
+      expect(res.body.data.user).toBeUndefined();
+      expect(res.body.data.sessionId).toEqual(expect.any(String));
+      expect(res.body.data.role).toBe(UserRole.Client);
+
+      const cookies = cookieHeader(res.headers).join('\n');
+      expect(cookies).toMatch(/accessToken=[^;]+/);
+      expect(cookies).toMatch(/refreshToken=[^;]+/);
+      expect(cookies).toMatch(/HttpOnly/);
+      expect(cookies).toMatch(/Path=\/api(;|\n|$)/);
+      expect(cookies).not.toMatch(/Path=\/api\/v/);
+    });
+
+    it('logs in a browser from an unknown origin', async () => {
+      const res = await request(app)
+        .post('/api/v1/auth/login')
+        .set({ ...browserHeaders(), Origin: 'https://evil.example' })
+        .send({
+          email: testUserData.email,
+          password: testUserData.password,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(cookieHeader(res.headers).join('\n')).toMatch(/accessToken=/);
+    });
+
+    it('allows the dashboard and a localhost portal', async () => {
+      const previousDashboard = config.dashboard_url;
+      const previousEnv = config.node_env;
+      config.dashboard_url = 'https://dashboard.controfferta.test';
+
+      try {
+        const dashboard = await request(app)
+          .post('/api/v1/auth/login')
+          .set({
+            ...browserHeaders(),
+            Origin: 'https://dashboard.controfferta.test',
+          })
+          .send({
+            email: testUserData.email,
+            password: testUserData.password,
+          });
+        expect(dashboard.status).toBe(200);
+
+        config.node_env = 'development';
+        const localPortal = await request(app)
+          .post('/api/v1/auth/login')
+          .set({ ...browserHeaders(), Origin: 'http://localhost:3999' })
+          .send({
+            email: testUserData.email,
+            password: testUserData.password,
+          });
+        expect(localPortal.status).toBe(200);
+
+        config.node_env = 'production';
+        const localProduction = await request(app)
+          .post('/api/v1/auth/login')
+          .set({ ...browserHeaders(), Origin: 'http://localhost:3999' })
+          .send({
+            email: testUserData.email,
+            password: testUserData.password,
+          });
+        expect(localProduction.status).toBe(200);
+      } finally {
+        config.dashboard_url = previousDashboard;
+        config.node_env = previousEnv;
+      }
+    });
+
+    it('uses the access cookie and refreshes from the refresh cookie', async () => {
+      const login = await request(app)
+        .post('/api/v1/auth/login')
+        .set(browserHeaders())
+        .send({
+          email: testUserData.email,
+          password: testUserData.password,
+        });
+      const pairs = cookieHeader(login.headers).map(
+        cookie => cookie.split(';')[0],
+      );
+      const accessCookie = pairs.find(cookie =>
+        cookie.startsWith('accessToken='),
+      );
+      const refreshCookie = pairs.find(cookie =>
+        cookie.startsWith('refreshToken='),
+      );
+
+      const profile = await request(app)
+        .get('/api/v1/users/me')
+        .set('Cookie', accessCookie!);
+      expect(profile.status).toBe(200);
+      expect(profile.body.data.email).toBe(testUserData.email);
+
+      const refreshed = await request(app)
+        .post('/api/v1/auth/refresh-token')
+        .set(browserHeaders())
+        .set('Cookie', refreshCookie!)
+        .send({});
+      expect(refreshed.status).toBe(200);
+      expect(refreshed.body.message).toBe('Token refreshed successfully');
+      expect(refreshed.body.data).toBeUndefined();
+      const refreshedCookies = cookieHeader(refreshed.headers).join('\n');
+      expect(refreshedCookies).toMatch(/accessToken=[^;]+/);
+      expect(refreshedCookies).not.toMatch(/refreshToken=/);
+
+      const loggedOut = await request(app)
+        .post('/api/v1/auth/logout')
+        .set(browserHeaders())
+        .set('Cookie', accessCookie!)
+        .send({ sessionId: login.body.data.sessionId });
+      expect(loggedOut.status).toBe(200);
+      const cleared = cookieHeader(loggedOut.headers).join('\n');
+      expect(cleared).toMatch(/accessToken=;/);
+      expect(cleared).toMatch(/refreshToken=;/);
     });
   });
 

@@ -10,7 +10,8 @@ export function registerAuthDocs() {
   registerAuth({
     method: 'post',
     path: '/auth/login',
-    summary: 'User login',
+    summary:
+      'Log in. Browsers get HttpOnly cookies. Other clients get tokens in the body.',
     body: AuthValidation.createLoginZodSchema.shape.body,
   });
 
@@ -49,7 +50,8 @@ export function registerAuthDocs() {
   registerAuth({
     method: 'post',
     path: '/auth/refresh-token',
-    summary: 'User refresh token',
+    summary:
+      'Refresh the access token from the refresh cookie or the JSON body.',
     isAuth: false,
     body: AuthValidation.refreshTokenZodSchema.shape.body,
   });

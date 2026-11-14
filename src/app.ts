@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
@@ -7,6 +8,7 @@ import globalErrorHandler from './app/middlewares/globalErrorHandler';
 import { stripeWebhookController } from './app/webhooks/stripe/stripe.controller';
 import { generateOpenApiDocumentV1 } from './api-docs/openapi';
 import { Morgan } from './shared/morgen';
+import { isTrustedOrigin } from './app/modules/auth/auth.cookies';
 import config from './config';
 import router from './routes';
 
@@ -36,8 +38,17 @@ app.post(
   stripeWebhookController,
 );
 
-// body parser
-app.use(cors());
+// cors
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || isTrustedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  }, credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 

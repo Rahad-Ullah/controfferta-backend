@@ -2,6 +2,7 @@ import express from 'express';
 import auth from '../../middlewares/auth';
 import { rateLimiter } from '../../middlewares/rateLimit';
 import validateRequest from '../../middlewares/validateRequest';
+import { preferRefreshCookie } from './auth.cookies';
 import { AuthController } from './auth.controller';
 import { AuthValidation } from './auth.validation';
 const router = express.Router();
@@ -74,6 +75,7 @@ router.post(
 
 router.post(
   '/refresh-token',
+  preferRefreshCookie,
   validateRequest(AuthValidation.refreshTokenZodSchema),
   AuthController.refreshToken,
 );

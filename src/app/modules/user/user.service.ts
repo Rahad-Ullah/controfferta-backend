@@ -5,7 +5,7 @@ import { EmailQueue } from '../../../helpers/email.queue';
 import { emailTemplate } from '../../../shared/emailTemplate';
 import deleteS3File from '../../../shared/deleteS3File';
 import generateOTP from '../../../utils/generateOTP';
-import { hashOtp, OTP_TTL_MS } from '../../../utils/otp';
+import { hashOtp } from '../../../utils/otp';
 import { IProviderProfileUpdate, IRegisterUser, IUser } from './user.interface';
 import { User } from './user.model';
 import { UserRole, UserStatus } from './user.constant';
@@ -17,6 +17,7 @@ import { MediaUploadServices } from '../mediaUpload/mediaUpload.service';
 import { Provider } from '../provider/provider.model';
 import { CreditLedgerServices } from '../creditLedger/creditLedger.service';
 import { errorLogger } from '../../../shared/logger';
+import { OTP_TTL_MS } from '../auth/auth.constant';
 import { AuthSession } from '../auth/auth.session';
 
 const createUserToDB = async (payload: IRegisterUser) => {

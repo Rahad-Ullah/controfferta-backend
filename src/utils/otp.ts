@@ -1,10 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import config from '../config';
 import { redis } from '../config/redis';
-
-const OTP_ATTEMPT_LIMIT = 5; // 5 attempts
-const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
-const OTP_ATTEMPT_TTL_SECONDS = OTP_TTL_MS / 1000; // 5 minutes in seconds
+import { OTP_ATTEMPT_TTL_SECONDS } from '../app/modules/auth/auth.constant';
 
 const otpAttemptKey = (userId: string) => `otp:attempts:${userId}`;
 
@@ -42,8 +39,6 @@ const otpMatches = (otp: number, storedHash: string) => {
 };
 
 export {
-  OTP_ATTEMPT_LIMIT,
-  OTP_TTL_MS,
   clearOtpAttempts,
   getOtpAttempts,
   hashOtp,

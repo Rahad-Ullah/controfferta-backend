@@ -15,73 +15,24 @@ import {
 import cryptoToken from '../../../utils/cryptoToken';
 import generateOTP from '../../../utils/generateOTP';
 import {
-  OTP_ATTEMPT_LIMIT,
-  OTP_TTL_MS,
   clearOtpAttempts,
   getOtpAttempts,
   hashOtp,
   otpMatches,
-  recordWrongOtp,
 } from '../../../utils/otp';
 import { ResetToken } from '../resetToken/resetToken.model';
 import { User } from '../user/user.model';
 import { UserStatus } from '../user/user.constant';
-import { AuthSession, SessionClient } from './auth.session';
+import {
+  LOCKED_OTP_MESSAGE,
+  OTP_ATTEMPT_LIMIT,
+  OTP_TTL_MS,
+} from './auth.constant';
+import { AuthHelper } from './auth.helper';
+import { SessionClient } from './auth.interface';
+import { AuthSession } from './auth.session';
 
-const LOCKED_OTP_MESSAGE = 'Too many incorrect codes. Request a new one.';
-
-const wrongOtpMessage = (attemptsLeft: number) =>
-  `Wrong OTP, ${attemptsLeft} attempts left`;
-
-const failOtpAttempt = async (attemptKey: string): Promise<never> => {
-  const attempts = await getOtpAttempts(attemptKey);
-  if (attempts >= OTP_ATTEMPT_LIMIT) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, LOCKED_OTP_MESSAGE);
-  }
-
-  const attemptCount = await recordWrongOtp(attemptKey);
-  const locked = attemptCount >= OTP_ATTEMPT_LIMIT;
-  throw new ApiError(
-    StatusCodes.BAD_REQUEST,
-    locked
-      ? LOCKED_OTP_MESSAGE
-      : wrongOtpMessage(OTP_ATTEMPT_LIMIT - attemptCount),
-  );
-};
-
-const issueSessionTokens = async (
-  user: { _id: unknown; role: string; email: string },
-  client: SessionClient,
-) => {
-  const sessionId = AuthSession.newSessionId();
-  const accessToken = jwtHelper.createToken(
-    { id: user._id, role: user.role, email: user.email },
-    config.jwt.jwt_secret as Secret,
-    config.jwt.jwt_expire_in as string,
-  );
-  const refreshToken = jwtHelper.createToken(
-    { id: user._id, role: user.role, email: user.email, sid: sessionId },
-    config.jwt.jwt_refresh_secret as Secret,
-    config.jwt.jwt_refresh_expire_in as string,
-  );
-  const session = await AuthSession.createLoginSession(
-    sessionId,
-    String(user._id),
-    refreshToken,
-    client,
-  );
-
-  return {
-    accessToken,
-    refreshToken,
-    sessionId: session.id,
-    role: user.role,
-    email: user.email,
-    _id: user._id,
-  };
-};
-
-//------------------ login service ------------------
+//------------------ login ------------------
 const loginUserFromDB = async (payload: ILoginData, client: SessionClient) => {
   const { email, password } = payload;
   const isExistUser = await User.findOne({ email }).select('+password');
@@ -129,10 +80,10 @@ const loginUserFromDB = async (payload: ILoginData, client: SessionClient) => {
     );
   }
 
-  return issueSessionTokens(isExistUser, client);
+  return AuthHelper.issueSessionTokens(isExistUser, client);
 };
 
-//forget password
+// ------------------- forget password -------------------
 const forgetPasswordToDB = async (email: string) => {
   const isExistUser = await User.isExistUserByEmail(email);
   if (
@@ -161,7 +112,7 @@ const forgetPasswordToDB = async (email: string) => {
   await clearOtpAttempts(isExistUser._id.toString());
 };
 
-//verify email
+// ------------------- verify email -------------------
 const verifyEmailToDB = async (
   payload: IVerifyEmail,
   client: SessionClient,
@@ -177,7 +128,7 @@ const verifyEmailToDB = async (
   const existingUser = await User.findOne({ email }).select('+authentication');
   if (!existingUser) {
     otpMatches(oneTimeCode, hashOtp(0));
-    return failOtpAttempt(`email:${email.trim().toLowerCase()}`);
+    return AuthHelper.failOtpAttempt(`email:${email.trim().toLowerCase()}`);
   }
 
   // check otp attempts limit
@@ -202,7 +153,7 @@ const verifyEmailToDB = async (
         { $set: { 'authentication.oneTimeCode': null } },
       );
     }
-    await failOtpAttempt(userId);
+    await AuthHelper.failOtpAttempt(userId);
   }
 
   // if otp matches -> check otp expiry and clear otp attempts
@@ -231,7 +182,7 @@ const verifyEmailToDB = async (
     );
 
     message = 'Email verify successfully';
-    data = await issueSessionTokens(existingUser, client);
+    data = await AuthHelper.issueSessionTokens(existingUser, client);
   } else {
     await User.findOneAndUpdate(
       { _id: existingUser._id },
@@ -257,7 +208,7 @@ const verifyEmailToDB = async (
   return { data, message };
 };
 
-//forget password
+// ------------------- reset password -------------------
 const resetPasswordToDB = async (
   token: string,
   payload: IAuthResetPassword,
@@ -315,6 +266,7 @@ const resetPasswordToDB = async (
   await AuthSession.revokeAllLoginSessions(String(isExistToken.user));
 };
 
+// ------------------- change password -------------------
 const changePasswordToDB = async (
   user: JwtPayload,
   payload: IChangePassword,
@@ -361,12 +313,12 @@ const changePasswordToDB = async (
   await AuthSession.revokeAllLoginSessions(String(user.id));
 };
 
-// refresh token
+// ------------------- refresh token -------------------
 const refreshTokenToDB = async (token: string) => {
   const decoded = jwtHelper.verifyToken(token, config.jwt.jwt_refresh_secret!);
 
   const isExistUser = await User.findById(decoded.id).select(
-    '_id email role status isDeleted',
+    '_id role status isDeleted',
   );
   if (!isExistUser || isExistUser.isDeleted) {
     throw new ApiError(StatusCodes.BAD_REQUEST, "User doesn't exist!");
@@ -394,7 +346,7 @@ const refreshTokenToDB = async (token: string) => {
   }
 
   const accessToken = jwtHelper.createToken(
-    { id: isExistUser._id, role: isExistUser.role, email: isExistUser.email },
+    { id: isExistUser._id, role: isExistUser.role, sid: decoded.sid },
     config.jwt.jwt_secret as Secret,
     config.jwt.jwt_expire_in as string,
   );
@@ -402,6 +354,7 @@ const refreshTokenToDB = async (token: string) => {
   return { accessToken };
 };
 
+// ------------------- logout -------------------
 const logoutFromDB = async (userId: string, sessionId: string) => {
   const removed = await AuthSession.revokeLoginSession(
     String(userId),
@@ -412,10 +365,12 @@ const logoutFromDB = async (userId: string, sessionId: string) => {
   }
 };
 
+// ------------------- logout all -------------------
 const logoutAllFromDB = async (userId: string) => {
   await AuthSession.revokeAllLoginSessions(String(userId));
 };
 
+// ------------------- list sessions -------------------
 const listSessionsFromDB = async (userId: string) => {
   const sessions = await AuthSession.listLoginSessions(String(userId));
   return { count: sessions.length, sessions };

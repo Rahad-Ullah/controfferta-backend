@@ -2,44 +2,31 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import catchAsync from '../../../shared/catchAsync';
 import sendResponse from '../../../shared/sendResponse';
+import {
+  clearAuthCookies,
+  isBrowserRequest,
+  setAccessCookie,
+} from './auth.cookies';
+import { AuthHelper, getSessionClient, isSessionTokens } from './auth.helper';
 import { AuthService } from './auth.service';
-import { SessionClient } from './auth.session';
 
-const sessionClient = (req: Request): SessionClient => ({
-  userAgent: req.get('user-agent') || 'unknown',
-  ip: req.ip || '',
-});
-
-const verifyEmail = catchAsync(async (req: Request, res: Response) => {
-  const { ...verifyData } = req.body;
-  const result = await AuthService.verifyEmailToDB(
-    verifyData,
-    sessionClient(req),
-  );
-
-  sendResponse(res, {
-    success: true,
-    statusCode: StatusCodes.OK,
-    message: result.message,
-    data: result.data,
-  });
-});
-
+// ------------------- login user -------------------
 const loginUser = catchAsync(async (req: Request, res: Response) => {
   const { ...loginData } = req.body;
   const result = await AuthService.loginUserFromDB(
     loginData,
-    sessionClient(req),
+    getSessionClient(req),
   );
 
-  sendResponse(res, {
-    success: true,
-    statusCode: StatusCodes.OK,
-    message: 'User logged in successfully.',
-    data: result,
-  });
+  AuthHelper.sendSessionTokens(
+    req,
+    res,
+    'User logged in successfully.',
+    result,
+  );
 });
 
+// ------------------- forget password -------------------
 const forgetPassword = catchAsync(async (req: Request, res: Response) => {
   const email = req.body.email;
   const result = await AuthService.forgetPasswordToDB(email);
@@ -53,6 +40,28 @@ const forgetPassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ------------------- verify email -------------------
+const verifyEmail = catchAsync(async (req: Request, res: Response) => {
+  const { ...verifyData } = req.body;
+  const result = await AuthService.verifyEmailToDB(
+    verifyData,
+    getSessionClient(req),
+  );
+
+  if (isSessionTokens(result.data)) {
+    AuthHelper.sendSessionTokens(req, res, result.message, result.data);
+    return;
+  }
+
+  sendResponse(res, {
+    success: true,
+    statusCode: StatusCodes.OK,
+    message: result.message,
+    data: result.data,
+  });
+});
+
+// ------------------- reset password -------------------
 const resetPassword = catchAsync(async (req: Request, res: Response) => {
   const token = req.headers.authorization;
   const { ...resetData } = req.body;
@@ -66,6 +75,7 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ------------------- change password -------------------
 const changePassword = catchAsync(async (req: Request, res: Response) => {
   const user = req.user;
   const { ...passwordData } = req.body;
@@ -78,8 +88,10 @@ const changePassword = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ------------------- logout -------------------
 const logout = catchAsync(async (req: Request, res: Response) => {
   await AuthService.logoutFromDB(req.user.id, req.body.sessionId);
+  if (isBrowserRequest(req)) clearAuthCookies(res);
 
   sendResponse(res, {
     success: true,
@@ -88,8 +100,10 @@ const logout = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ------------------- logout all -------------------
 const logoutAll = catchAsync(async (req: Request, res: Response) => {
   await AuthService.logoutAllFromDB(req.user.id);
+  if (isBrowserRequest(req)) clearAuthCookies(res);
 
   sendResponse(res, {
     success: true,
@@ -98,6 +112,7 @@ const logoutAll = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ------------------- list sessions -------------------
 const listSessions = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.listSessionsFromDB(req.user.id);
 
@@ -109,9 +124,19 @@ const listSessions = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-// refresh token
+// ------------------- refresh token -------------------
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.refreshTokenToDB(req.body.refreshToken);
+
+  if (isBrowserRequest(req)) {
+    setAccessCookie(res, result.accessToken);
+    sendResponse(res, {
+      success: true,
+      statusCode: StatusCodes.OK,
+      message: 'Token refreshed successfully',
+    });
+    return;
+  }
 
   sendResponse(res, {
     success: true,

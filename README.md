@@ -261,6 +261,7 @@ PORT=5000                         # Production port (npm start)
 PORT_DEV=5001                     # Development port (npm run dev)
 IP_ADDRESS=127.0.0.1
 FRONTEND_URL=http://localhost:3000
+DASHBOARD_URL=http://localhost:3001
 BACKEND_URL=http://localhost:5001
 MEDIA_SERVER_URL=http://localhost:5001
 LOGO_URL=

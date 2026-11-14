@@ -11,6 +11,7 @@ export default {
   port: process.env.PORT,
   port_dev: process.env.PORT_DEV,
   frontend_url: process.env.FRONTEND_URL,
+  dashboard_url: process.env.DASHBOARD_URL,
   backend_url: process.env.BACKEND_URL,
   media_server_url: process.env.MEDIA_SERVER_URL,
   logo_url: process.env.LOGO_URL,
