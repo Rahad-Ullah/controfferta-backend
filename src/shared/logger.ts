@@ -27,7 +27,7 @@ const logger = createLogger({
       ),
       datePattern: 'DD-MM-YYYY-HH',
       maxSize: '20m',
-      maxFiles: '1d',
+      maxFiles: '3d',
     }),
   ],
 });
@@ -46,7 +46,7 @@ const errorLogger = createLogger({
       ),
       datePattern: 'DD-MM-YYYY-HH',
       maxSize: '20m',
-      maxFiles: '1d',
+      maxFiles: '3d',
     }),
   ],
 });

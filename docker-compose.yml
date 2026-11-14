@@ -9,9 +9,8 @@ services:
       - .env
     ports:
       - '${PORT_DEV}:${PORT_DEV}'
-    # volumes:
-    #   - .:/app
-    #   - /app/node_modules
+    volumes:
+      - ./winston:/app/winston
 
     develop:
       watch:
@@ -43,24 +42,5 @@ services:
       - .env
     ports:
       - '${PORT}:${PORT}'
-
-  # --- Shared Databases (Starts with either environment) ---
-#   mongodb:
-#     image: mongo:latest
-#     ports:
-#       - '27018:27017'
-#     volumes:
-#       - mongodb_data:/data/db
-#     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
-
-#   redis:
-#     image: redis:latest
-#     ports:
-#       - '6380:6379'
-#     volumes:
-#       - redis_data:/data
-#     command: ['redis-server', '--appendonly', 'yes']
-
-# volumes:
-#   mongodb_data:
-#   redis_data:
+    volumes:
+      - ./winston:/app/winston
