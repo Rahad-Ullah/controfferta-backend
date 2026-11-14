@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import app from '../../src/app';
+import config from '../../src/config';
 import { Transaction } from '../../src/app/modules/transaction/transaction.model';
 import { StripeEvent } from '../../src/app/modules/stripeEvent/stripeEvent.model';
 import { harness } from '../harness';
@@ -11,16 +12,39 @@ describe('POST /webhooks/stripe', () => {
     harness().stripeMock.webhooks.constructEvent.mockClear();
   });
 
-  it('rejects an invalid signature', async () => {
-    const res = await request(app)
-      .post('/webhooks/stripe')
-      .set('Content-Type', 'application/json')
-      .set('stripe-signature', 'invalid')
-      .send('{}');
+  it('rejects an invalid signature without the library message', async () => {
+    const previous = config.node_env;
+    config.node_env = 'production';
+    try {
+      const res = await request(app)
+        .post('/webhooks/stripe')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', 'invalid')
+        .send('{}');
 
-    expect(res.status).toBe(400);
-    expect(res.text).toMatch(/Webhook Error/i);
-    expect(harness().stripeMock.paymentIntents.retrieve).not.toHaveBeenCalled();
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('Webhook Error');
+      expect(harness().stripeMock.paymentIntents.retrieve).not.toHaveBeenCalled();
+    } finally {
+      config.node_env = previous;
+    }
+  });
+
+  it('keeps the signature detail out of the development response', async () => {
+    const previous = config.node_env;
+    config.node_env = 'development';
+    try {
+      const res = await request(app)
+        .post('/webhooks/stripe')
+        .set('Content-Type', 'application/json')
+        .set('stripe-signature', 'invalid')
+        .send('{}');
+
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('Webhook Error');
+    } finally {
+      config.node_env = previous;
+    }
   });
 
   it('records a checkout and ignores a repeated event id', async () => {

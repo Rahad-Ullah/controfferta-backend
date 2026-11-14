@@ -15,8 +15,9 @@ export const stripeWebhookController = async (req: Request, res: Response) => {
       sig!,
       config.stripe.webhook_secret!
     );
-  } catch (err: any) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  } catch (err: unknown) {
+    console.error('Stripe webhook signature failed:', err);
+    return res.status(400).send('Webhook Error');
   }
 
   try {

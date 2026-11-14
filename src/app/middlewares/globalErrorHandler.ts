@@ -8,7 +8,8 @@ import { errorLogger } from '../../shared/logger';
 import { IErrorMessage } from '../../types/errors.types';
 
 const globalErrorHandler: ErrorRequestHandler = (error, req, res, _next) => {
-  config.node_env === 'development'
+  const isDevelopment = config.node_env === 'development';
+  isDevelopment
     ? console.log('🚨 globalErrorHandler ~~ ', error)
     : errorLogger.error('🚨 globalErrorHandler ~~ ', error);
 
@@ -49,13 +50,13 @@ const globalErrorHandler: ErrorRequestHandler = (error, req, res, _next) => {
           },
         ]
       : [];
-  } else if (error instanceof Error) {
+  } else if (error instanceof Error && isDevelopment) {
     message = error.message;
     errorMessages = error.message
       ? [
           {
             path: '',
-            message: error?.message,
+            message: error.message,
           },
         ]
       : [];
@@ -65,7 +66,7 @@ const globalErrorHandler: ErrorRequestHandler = (error, req, res, _next) => {
     success: false,
     message,
     errorMessages,
-    stack: config.node_env !== 'production' ? error?.stack : undefined,
+    stack: isDevelopment ? error?.stack : undefined,
   });
 };
 
