@@ -1,6 +1,6 @@
 import { StatusCodes } from "http-status-codes";
 import { Wallet } from "./wallet.model";
-import ApiError from "src/errors/ApiError";
+import ApiError from "../../../errors/ApiError";
 
 // ----------------- deduct wallet available balance -----------------
 const deductWalletAvailableBalance = async (walletId: string, amountUSD: number) => {

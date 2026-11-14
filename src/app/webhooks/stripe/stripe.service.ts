@@ -14,7 +14,7 @@ import { Wallet } from '../../modules/wallet/wallet.model';
 import { CreditPaymentStatus } from '../../modules/creditPurchase/creditPurchase.constant';
 import { CreditPurchase } from '../../modules/creditPurchase/creditPurchase.model';
 import { StripeFulfillment } from './stripe.fulfillment';
-import ApiError from 'src/errors/ApiError';
+import ApiError from '../../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
 import mongoose from 'mongoose';
 
