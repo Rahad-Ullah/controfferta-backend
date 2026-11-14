@@ -6,15 +6,9 @@ import {
   AUTH_SESSION_KEY_PREFIX,
   AUTH_USER_SESSIONS_KEY_PREFIX,
 } from './auth.constant';
-import { LoginSession, SessionClient } from './auth.interface';
+import { UserSession, SessionClient } from './auth.interface';
 
-// Redis record. The refresh-token hash is not returned to the client.
-type StoredSession = LoginSession & {
-  userId: string;
-  tokenHash: string;
-};
-
-// One session record.
+// Lookup key for one session.
 const sessionKey = (sessionId: string) =>
   `${AUTH_SESSION_KEY_PREFIX}:${sessionId}`;
 
@@ -22,12 +16,8 @@ const sessionKey = (sessionId: string) =>
 const userSessionsKey = (userId: string) =>
   `${AUTH_USER_SESSIONS_KEY_PREFIX}:${userId}`;
 
-// Hash stored instead of the refresh token.
-const hashToken = (token: string) =>
-  crypto.createHash('sha256').update(token).digest('hex');
-
-// Redis TTL follows the refresh token expiry.
-const refreshTtlSeconds = (refreshToken: string) => {
+// Session lifetime follows the refresh token. The token itself is not stored.
+const sessionTtlSeconds = (refreshToken: string) => {
   const decoded = jwtHelper.verifyToken(
     refreshToken,
     config.jwt.jwt_refresh_secret!,
@@ -36,18 +26,10 @@ const refreshTtlSeconds = (refreshToken: string) => {
   return Math.max(exp - Math.floor(Date.now() / 1000), 1);
 };
 
-// Public session fields, without the token hash.
-const toLoginSession = (session: StoredSession): LoginSession => ({
-  id: session.id,
-  userAgent: session.userAgent,
-  ip: session.ip,
-  createdAt: session.createdAt,
-});
-
-// Drop ids whose session record has already expired.
-const readUserSessions = async (userId: string) => {
+// Active sessions for the user. Drop ids whose record has already expired.
+const listLoginSessions = async (userId: string) => {
   const ids = await redis.smembers(userSessionsKey(userId));
-  const sessions: StoredSession[] = [];
+  const sessions: UserSession[] = [];
 
   for (const id of ids) {
     const raw = await redis.get(sessionKey(id));
@@ -56,7 +38,7 @@ const readUserSessions = async (userId: string) => {
       continue;
     }
 
-    sessions.push(JSON.parse(raw) as StoredSession);
+    sessions.push(JSON.parse(raw) as UserSession);
   }
 
   return sessions;
@@ -65,54 +47,50 @@ const readUserSessions = async (userId: string) => {
 // New id for a login.
 const newSessionId = () => crypto.randomBytes(16).toString('hex');
 
-// Load one session.
+// Load one session by its id.
 const readSession = async (sessionId: string) => {
   if (!sessionId) return null;
   const raw = await redis.get(sessionKey(sessionId));
   if (!raw) return null;
-  return JSON.parse(raw) as StoredSession;
+  return JSON.parse(raw) as UserSession;
 };
 
-// Save the session for the life of the refresh token.
-const createLoginSession = async (
+// Save the session under its id for the life of the refresh token.
+const createUserSession = async (
   sessionId: string,
   userId: string,
   refreshToken: string,
   client: SessionClient,
-) => {
-  const session: StoredSession = {
+): Promise<UserSession> => {
+  const ttlSeconds = sessionTtlSeconds(refreshToken);
+  const session: UserSession = {
     id: sessionId,
     userId,
-    tokenHash: hashToken(refreshToken),
     userAgent: client.userAgent || 'unknown',
     ip: client.ip || '',
     createdAt: new Date().toISOString(),
   };
-  const ttl = refreshTtlSeconds(refreshToken);
 
-  await redis.set(sessionKey(sessionId), JSON.stringify(session), 'EX', ttl);
+  await redis.set(
+    sessionKey(sessionId),
+    JSON.stringify(session),
+    'EX',
+    ttlSeconds,
+  );
   await redis.sadd(userSessionsKey(userId), sessionId);
-  await redis.expire(userSessionsKey(userId), ttl);
+  await redis.expire(userSessionsKey(userId), ttlSeconds);
 
-  return toLoginSession(session);
+  return session;
 };
 
-// The session belongs to this user and this refresh token.
-const matchesRefreshToken = (
-  session: StoredSession | null,
-  userId: string,
-  refreshToken: string,
-) =>
-  Boolean(
-    session &&
-      session.userId === userId &&
-      session.tokenHash === hashToken(refreshToken),
-  );
+// Keep the same session and give it the new refresh token's lifetime.
+const extendUserSession = async (sessionId: string, refreshToken: string) => {
+  const session = await readSession(sessionId);
+  if (!session) return;
 
-// Active sessions for the user, without the token hash.
-const listLoginSessions = async (userId: string) => {
-  const sessions = await readUserSessions(userId);
-  return sessions.map(toLoginSession);
+  const ttlSeconds = sessionTtlSeconds(refreshToken);
+  await redis.expire(sessionKey(sessionId), ttlSeconds);
+  await redis.expire(userSessionsKey(session.userId), ttlSeconds);
 };
 
 // Remove one session when it belongs to this user.
@@ -136,9 +114,9 @@ const revokeAllLoginSessions = async (userId: string) => {
 
 export const AuthSession = {
   newSessionId,
-  createLoginSession,
+  createUserSession,
+  extendUserSession,
   readSession,
-  matchesRefreshToken,
   listLoginSessions,
   revokeLoginSession,
   revokeAllLoginSessions,

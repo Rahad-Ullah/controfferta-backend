@@ -1,14 +1,14 @@
-export type SessionClient = {
-  userAgent: string;
-  ip: string;
-};
-
-// Login session record stored in Redis and returned by the session list.
-export type LoginSession = {
+export type UserSession = {
   id: string;
+  userId: string;
   userAgent: string;
   ip: string;
   createdAt: string;
+};
+
+export type SessionClient = {
+  userAgent: string;
+  ip: string;
 };
 
 export type SessionUser = {
@@ -22,4 +22,13 @@ export type SessionTokens = {
   sessionId: string;
   role: string;
   _id: unknown;
+};
+
+// Claims on every access and refresh token. Redis holds the session, not the token.
+export type AuthTokenPayload = {
+  id: string;
+  role: string;
+  sid: string;
+  iat?: number;
+  exp?: number;
 };

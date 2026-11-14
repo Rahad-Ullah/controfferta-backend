@@ -5,7 +5,6 @@ import sendResponse from '../../../shared/sendResponse';
 import {
   clearAuthCookies,
   isBrowserRequest,
-  setAccessCookie,
 } from './auth.cookies';
 import { AuthHelper, getSessionClient, isSessionTokens } from './auth.helper';
 import { AuthService } from './auth.service';
@@ -127,23 +126,12 @@ const listSessions = catchAsync(async (req: Request, res: Response) => {
 // ------------------- refresh token -------------------
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.refreshTokenToDB(req.body.refreshToken);
-
-  if (isBrowserRequest(req)) {
-    setAccessCookie(res, result.accessToken);
-    sendResponse(res, {
-      success: true,
-      statusCode: StatusCodes.OK,
-      message: 'Token refreshed successfully',
-    });
-    return;
-  }
-
-  sendResponse(res, {
-    success: true,
-    statusCode: StatusCodes.OK,
-    message: 'Token refreshed successfully',
-    data: result,
-  });
+  AuthHelper.sendSessionTokens(
+    req,
+    res,
+    'Token refreshed successfully',
+    result,
+  );
 });
 
 export const AuthController = {

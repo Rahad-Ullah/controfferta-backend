@@ -48,7 +48,7 @@ const issueSessionTokens = async (
     config.jwt.jwt_refresh_secret as Secret,
     config.jwt.jwt_refresh_expire_in as string,
   );
-  const session = await AuthSession.createLoginSession(
+  const session = await AuthSession.createUserSession(
     sessionId,
     String(user._id),
     refreshToken,

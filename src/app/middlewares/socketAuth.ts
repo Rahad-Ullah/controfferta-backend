@@ -1,16 +1,7 @@
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import { Socket } from 'socket.io';
 import ApiError from '../../errors/ApiError';
 import { StatusCodes } from 'http-status-codes';
-import { UserRole } from '../modules/user/user.constant';
-
-interface JwtPayload {
-  id: string;
-  role: UserRole;
-  email?: string;
-  iat: number;
-  exp: number;
-}
 
 export const socketAuth = (socket: Socket, next: (err?: Error) => void) => {
   try {

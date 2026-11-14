@@ -331,14 +331,9 @@ const refreshTokenToDB = async (token: string) => {
     );
   }
 
-  const session = await AuthSession.readSession(String(decoded.sid ?? ''));
-  if (
-    !AuthSession.matchesRefreshToken(
-      session,
-      isExistUser._id.toString(),
-      token,
-    )
-  ) {
+  const sessionId = String(decoded.sid ?? '');
+  const session = await AuthSession.readSession(sessionId);
+  if (!session || session.userId !== isExistUser._id.toString()) {
     throw new ApiError(
       StatusCodes.UNAUTHORIZED,
       'This session has ended. Please log in again.',
@@ -346,12 +341,24 @@ const refreshTokenToDB = async (token: string) => {
   }
 
   const accessToken = jwtHelper.createToken(
-    { id: isExistUser._id, role: isExistUser.role, sid: decoded.sid },
+    { id: isExistUser._id, role: isExistUser.role, sid: sessionId },
     config.jwt.jwt_secret as Secret,
     config.jwt.jwt_expire_in as string,
   );
+  const refreshToken = jwtHelper.createToken(
+    { id: isExistUser._id, role: isExistUser.role, sid: sessionId },
+    config.jwt.jwt_refresh_secret as Secret,
+    config.jwt.jwt_refresh_expire_in as string,
+  );
+  await AuthSession.extendUserSession(sessionId, refreshToken);
 
-  return { accessToken };
+  return {
+    accessToken,
+    refreshToken,
+    sessionId,
+    role: isExistUser.role,
+    _id: isExistUser._id,
+  };
 };
 
 // ------------------- logout -------------------

@@ -85,7 +85,6 @@ const cookieOptions = (maxAge?: number) => {
   };
 };
 
-// Set both cookies at once. Access covers all API routes. Refresh only the refresh route.
 export const setAuthCookies = (
   res: Response,
   tokens: { accessToken: string; refreshToken: string },
@@ -99,15 +98,6 @@ export const setAuthCookies = (
     AUTH_COOKIE.refresh,
     tokens.refreshToken,
     cookieOptions(maxAgeMs(config.jwt.jwt_refresh_expire_in, '7d')),
-  );
-};
-
-// Refresh replaces the access cookie and leaves the refresh cookie in place.
-export const setAccessCookie = (res: Response, accessToken: string) => {
-  res.cookie(
-    AUTH_COOKIE.access,
-    accessToken,
-    cookieOptions(maxAgeMs(config.jwt.jwt_expire_in, '1d')),
   );
 };
 

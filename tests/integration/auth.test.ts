@@ -263,10 +263,12 @@ describe('Auth API', () => {
         .send({});
       expect(refreshed.status).toBe(200);
       expect(refreshed.body.message).toBe('Token refreshed successfully');
-      expect(refreshed.body.data).toBeUndefined();
+      expect(refreshed.body.data.accessToken).toBeUndefined();
+      expect(refreshed.body.data.refreshToken).toBeUndefined();
+      expect(refreshed.body.data.sessionId).toBe(login.body.data.sessionId);
       const refreshedCookies = cookieHeader(refreshed.headers).join('\n');
       expect(refreshedCookies).toMatch(/accessToken=[^;]+/);
-      expect(refreshedCookies).not.toMatch(/refreshToken=/);
+      expect(refreshedCookies).toMatch(/refreshToken=[^;]+/);
 
       const loggedOut = await request(app)
         .post('/api/v1/auth/logout')
@@ -557,6 +559,8 @@ describe('Auth API', () => {
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Token refreshed successfully');
       expect(res.body.data).toHaveProperty('accessToken');
+      expect(res.body.data).toHaveProperty('refreshToken');
+      expect(res.body.data.sessionId).toBe(login.body.data.sessionId);
     });
 
     it('returns 400 when the account is suspended', async () => {
@@ -637,6 +641,12 @@ describe('Auth API', () => {
           expect.objectContaining({ userAgent: 'PhoneApp/1.0' }),
           expect.objectContaining({ userAgent: 'LaptopBrowser/2.0' }),
         ]),
+      );
+      expect(listed.body.data.sessions[0]).toEqual(
+        expect.objectContaining({
+          id: expect.any(String),
+          userId: expect.any(String),
+        }),
       );
       expect(listed.body.data.sessions[0]).not.toHaveProperty('tokenHash');
 

@@ -51,7 +51,7 @@ export function registerAuthDocs() {
     method: 'post',
     path: '/auth/refresh-token',
     summary:
-      'Refresh the access token from the refresh cookie or the JSON body.',
+      'Refresh the access and refresh tokens. The session id stays the same.',
     isAuth: false,
     body: AuthValidation.refreshTokenZodSchema.shape.body,
   });
